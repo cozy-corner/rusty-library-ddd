@@ -94,6 +94,107 @@
 
 詳細は各ドキュメント（`doc/`）を参照してください。
 
+## ブランチ戦略
+
+### GitHub Flow
+
+シンプルなGitHub Flowを採用します。
+
+**ブランチ構成:**
+- `main` ブランチのみ
+- mainは常に動作する状態を保つ
+
+**ブランチ命名規則:**
+```
+feature/<phase>/<task-name>
+```
+
+例:
+- `feature/phase1/value-objects`
+- `feature/phase1/loan-aggregate`
+- `feature/phase2/reservation-aggregate`
+
+**ワークフロー:**
+1. mainからタスクブランチを作成
+2. 実装・テスト・コミット
+3. PRを作成してmainにマージ
+4. ブランチ削除
+
+## タスク分割
+
+### タスク単位 = PR単位
+
+各タスクは1つのPRに対応します。
+
+**タスク分割の原則:**
+- 1タスク = 1つの明確な責務
+- レビュー可能なサイズ（数百行程度）
+- 単独でテスト・動作確認可能
+- 他のタスクと独立
+
+**Phase単位でのタスク管理:**
+- 各Phaseの実装計画から、PR単位のタスクに分割
+- タスクリストは `doc/phase/<phase>_tasks.md` に記載
+- 依存関係を明記
+
+## 開発サイクル
+
+### タスクの進め方
+
+```bash
+# 1. タスクブランチ作成
+just task-start phase1 <task-name>
+
+# 2. 実装（TDDの場合）
+# - Red: テストを書く（失敗する）
+# - Green: 実装する（テストが通る）
+# - Refactor: リファクタリング
+
+# 3. チェック（format, lint, test）
+just task-check
+
+# 4. コミット（pre-commit hookが自動実行される）
+git add .
+git commit -m "<type>: <description>"
+
+# 5. リモートへプッシュ
+just task-push
+
+# 6. PR作成
+just task-pr "<PR title>"
+# または GitHub上で手動作成
+
+# 7. レビュー・マージ後、ブランチ削除
+just task-done
+```
+
+### コミットメッセージ規則
+
+Conventional Commitsに従います：
+
+```
+<type>: <description>
+
+[optional body]
+```
+
+**主なtype:**
+- `feat`: 新機能
+- `fix`: バグ修正
+- `refactor`: リファクタリング
+- `test`: テスト追加・修正
+- `docs`: ドキュメント
+- `chore`: ビルド、ツール設定等
+
+**例:**
+```
+feat: implement ExtensionCount value object
+
+- Add ExtensionCount with business rule (max 1 extension)
+- Add increment() with validation
+- Add TDD tests
+```
+
 ## 環境要件
 
 ### 必須環境
