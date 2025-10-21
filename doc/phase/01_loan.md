@@ -58,6 +58,120 @@
 
 ---
 
+## ユビキタス言語
+
+### 集約
+
+**貸出（Loan）**
+
+1冊の書籍の1回の貸出。貸出管理コンテキストの中心概念。会員が書籍を借りた時点で開始し、返却した時点で終了する。
+
+### 他コンテキストへの参照
+
+**会員（Member）**
+
+図書館の利用者。このコンテキストでは会員ID（MemberId）のみを保持する。詳細は会員管理コンテキストが管理する。
+
+**書籍（Book）**
+
+図書館の蔵書。このコンテキストでは書籍ID（BookId）のみを保持する。詳細はカタログ管理コンテキストが管理する。
+
+**職員（Staff）**
+
+図書館の職員。貸出・返却の受付を行う。このコンテキストでは職員ID（StaffId）のみを保持する。
+
+### 値オブジェクト
+
+**貸出ID（LoanId）**
+
+貸出を一意に識別するID。
+
+**延長回数（ExtensionCount）**
+
+貸出を延長した回数。0または1のみ許可される。ビジネスルール「延長は1回まで」を型で表現する。
+
+**貸出状態（LoanStatus）**
+
+貸出の現在の状態：
+- **貸出中（Active）**: 通常の貸出状態
+- **延滞中（Overdue）**: 返却期限を過ぎている
+- **返却済み（Returned）**: 返却が完了している
+
+### 時間に関する用語
+
+**貸出日（Loaned At）**
+
+書籍を貸し出した日時。
+
+**返却期限（Due Date）**
+
+書籍を返却しなければならない日時。貸出日から2週間後に自動設定される。延長した場合は、さらに2週間延長される。
+
+**返却日（Returned At）**
+
+実際に書籍が返却された日時。
+
+**貸出期間（Loan Period）**
+
+書籍を借りることができる期間。標準は2週間。延長すると合計4週間になる。
+
+### コマンド（意図）
+
+**書籍を貸し出す（LoanBook）**
+
+会員が書籍を借りる行為。職員が受付を行う。
+
+**貸出を延長する（ExtendLoan）**
+
+返却期限を延長する行為。延長は1回まで可能。返却期限が2週間延長される。
+
+**書籍を返却する（ReturnBook）**
+
+借りていた書籍を返す行為。職員が受付を行う。延滞していても返却は受け付ける。
+
+### イベント（事実）
+
+**書籍が貸し出された（BookLoaned）**
+
+書籍の貸出が完了した事実。貸出ID、書籍ID、会員ID、貸出日、返却期限、職員IDを記録する。
+
+**貸出が延長された（LoanExtended）**
+
+貸出の返却期限が延長された事実。貸出ID、旧返却期限、新返却期限、延長回数を記録する。
+
+**書籍が返却された（BookReturned）**
+
+書籍の返却が完了した事実。貸出ID、書籍ID、会員ID、返却日、延滞していたかを記録する。
+
+**貸出が延滞した（LoanBecameOverdue）**
+
+返却期限を過ぎても返却されていない事実。バッチ処理で検出される。
+
+### ビジネスルール関連の用語
+
+**延滞（Overdue）**
+
+返却期限を過ぎても書籍が返却されていない状態。延滞中の会員は新規の貸出ができない。
+
+**延長（Extension）**
+
+返却期限を延ばすこと。延長は1回まで可能。延長すると返却期限が2週間延長される。延滞中の貸出は延長できない。
+
+**貸出上限（Loan Limit）**
+
+1人の会員が同時に借りられる書籍の最大数。標準は5冊。
+
+**貸出可能（Available for Loan）**
+
+書籍が貸出できる状態。他の会員に貸出中でなく、予約による取り置きもされていない状態。
+
+### コンテキスト境界
+
+**このコンテキストでは：**
+書籍と会員はIDでのみ参照し、詳細は知らない。これによりコンテキスト境界を守る。
+
+---
+
 ## ドメインモデル
 
 ### Loan集約
@@ -153,174 +267,6 @@
 - まだ延滞マークされていない
 
 ---
-
-## 主要な設計判断
-
-### 1. 純粋関数によるドメインロジック
-
-**ドメイン層の関数：**
-- `loan_book()` - 書籍を貸し出す
-- `extend_loan()` - 貸出を延長する
-- `return_book()` - 書籍を返却する
-- `mark_overdue()` - 延滞をマークする
-
-**特徴：**
-- 副作用なし
-- 入力：現在の状態、パラメータ
-- 出力：新しい状態、イベント
-- テストが容易
-
-**決定と実行の分離：**
-- ドメイン層：何をすべきか決定（純粋関数）
-- アプリケーション層：副作用を実行（I/O）
-
-### 2. イミュータビリティ
-
-**すべてのドメインオブジェクトは不変：**
-- 値オブジェクト
-- 集約
-- イベント
-
-**操作は新しいインスタンスを返す：**
-元の状態は変更せず、新しい状態を生成。
-
-### 3. 型でビジネスルールを表現
-
-**ExtensionCount：**
-「延長は1回まで」を型で強制。不正な値（2以上）を作れない。
-
-**LoanStatus：**
-状態遷移を型で制御。返却済みの貸出は延長できない。
-
-### 4. コンテキスト境界を守る
-
-**ポート経由で依存：**
-- MemberService（trait）
-- BookService（trait）
-- NotificationService（trait）
-
-**Phase 1のモック実装：**
-- 固定値を返す
-- データベースを持たない
-- 他コンテキストの代わり
-
-**設計の理由：**
-Phase 4でHTTP実装に切り替え可能。最初からポート設計することで、後で実装を変更できる。
-
-### 5. イベントソーシング
-
-**イベントストア：**
-すべてのドメインイベントをPostgreSQLに保存。
-
-**状態復元：**
-イベント列をfold/reduceして現在の状態を復元。
-
-**CQRS：**
-- コマンド側：イベントストアに書き込み
-- クエリ側：Read Model（loans_viewテーブル）から読み込み
-
-### 6. ヘキサゴナルアーキテクチャ
-
-**レイヤー構成：**
-```
-domain/          純粋関数、ビジネスロジック
-  ↑
-application/     ユースケース、副作用の実行
-  ↑
-ports/           トレイト定義
-  ↑
-adapters/        実装（PostgreSQL, モック, REST API）
-```
-
-**依存の方向：**
-外側が内側に依存。ドメイン層は何にも依存しない。
-
----
-
-## 技術スタック
-
-### 言語：Rust
-
-**選定理由：**
-- イミュータビリティがデフォルト
-- 強力な型システム
-- Result型によるエラーハンドリング
-- トレイトシステム（ポート設計に最適）
-- 関数型プログラミングとの相性
-
-### データベース：PostgreSQL
-
-**用途：**
-- イベントストア（eventsテーブル）
-- Read Model（loans_viewテーブル）
-
-**選定理由：**
-- イベントソーシングに必要
-- JSONBでイベントデータを保存
-- トランザクション管理
-
-### Webフレームワーク：Axum
-
-**用途：**
-- REST API
-
-**選定理由：**
-- Tokio上で動作
-- 型安全
-- シンプル
-
-### その他：**
-- async/await（非同期処理）
-- serde（シリアライゼーション）
-- chrono（日時処理）
-- uuid（ID生成）
-- sqlx（データベースアクセス）
-
----
-
-## プロジェクト構造
-
-```
-loan_management/
-├── src/
-│   ├── domain/
-│   │   ├── loan.rs              # Loan集約、純粋関数
-│   │   ├── value_objects.rs     # 値オブジェクト
-│   │   ├── commands.rs          # コマンド定義
-│   │   ├── events.rs            # イベント定義
-│   │   └── errors.rs            # ドメインエラー
-│   │
-│   ├── ports/
-│   │   ├── event_store.rs       # trait EventStore
-│   │   ├── loan_read_model.rs   # trait LoanReadModel
-│   │   ├── member_service.rs    # trait MemberService
-│   │   ├── book_service.rs      # trait BookService
-│   │   └── notification_service.rs
-│   │
-│   ├── adapters/
-│   │   ├── mock/                # モック実装
-│   │   │   ├── member_service.rs
-│   │   │   ├── book_service.rs
-│   │   │   └── notification_service.rs
-│   │   ├── postgres/            # PostgreSQL実装
-│   │   │   ├── event_store.rs
-│   │   │   └── loan_read_model.rs
-│   │   └── api/                 # REST API
-│   │       └── handlers.rs
-│   │
-│   ├── application/
-│   │   └── loan_service.rs      # ユースケース
-│   │
-│   └── main.rs
-│
-├── Cargo.toml
-└── migrations/                  # データベースマイグレーション
-    ├── 001_create_events.sql
-    └── 002_create_loans_view.sql
-```
-
----
-
 ## データベーススキーマ
 
 ### イベントストア
@@ -332,8 +278,13 @@ CREATE TABLE events (
     aggregate_type VARCHAR(50) NOT NULL,
     event_type VARCHAR(100) NOT NULL,
     event_data JSONB NOT NULL,
-    occurred_at TIMESTAMPTZ NOT NULL
+    occurred_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX idx_events_aggregate ON events(aggregate_id);
+CREATE INDEX idx_events_type ON events(event_type);
+CREATE INDEX idx_events_occurred_at ON events(occurred_at);
 ```
 
 **設計のポイント：**
@@ -353,8 +304,16 @@ CREATE TABLE loans_view (
     due_date TIMESTAMPTZ NOT NULL,
     returned_at TIMESTAMPTZ,
     extension_count SMALLINT NOT NULL,
-    status VARCHAR(20) NOT NULL
+    status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE INDEX idx_loans_member ON loans_view(member_id);
+CREATE INDEX idx_loans_book ON loans_view(book_id);
+CREATE INDEX idx_loans_status ON loans_view(status);
+CREATE INDEX idx_loans_due_date ON loans_view(due_date) 
+    WHERE returned_at IS NULL;
 ```
 
 **設計のポイント：**
@@ -461,40 +420,6 @@ GET /loans/{loan_id}
 1. main.rsで依存性注入
 2. データベースマイグレーション
 3. 動作確認
-
----
-
-## テスト戦略
-
-### ドメイン層のテスト
-
-**テストすべきこと：**
-- 正常系の動作
-- ビジネスルール違反のエラー
-- 境界値
-- 状態復元（fold/reduce）
-
-**特徴：**
-- 純粋関数なので単体テストが容易
-- データベース不要
-- 高速実行
-
-### アプリケーション層のテスト
-
-**テストすべきこと：**
-- ユースケースの正常系
-- 外部サービスのエラーハンドリング
-- イベント保存とRead Model更新
-
-**実装方針：**
-- モックを使った統合テスト
-
-### API層のテスト
-
-**テストすべきこと：**
-- HTTPリクエストの処理
-- レスポンス形式
-- エラーレスポンス
 
 ---
 
