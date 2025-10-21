@@ -71,3 +71,38 @@ setup:
 dev:
     just db-up
     cargo run
+
+# ====================
+# 開発サイクル（PR単位）
+# ====================
+
+# タスクブランチ作成（例: just task-start phase1 value-objects）
+task-start phase task_name:
+    git checkout -b feature/{{phase}}/{{task_name}}
+    @echo "✓ Branch 'feature/{{phase}}/{{task_name}}' created"
+    @echo "Next: Implement your changes, then run 'just task-check'"
+
+# タスク完了前のチェック（format, lint, test）
+task-check:
+    @echo "Running all checks..."
+    just check
+    @echo "✓ All checks passed!"
+    @echo "Next: Commit your changes"
+
+# PR作成準備（リモートへpush）
+task-push:
+    git push -u origin HEAD
+    @echo "✓ Pushed to remote"
+    @echo "Next: Create PR with 'just task-pr' or manually on GitHub"
+
+# PR作成（GitHub CLI使用）
+task-pr title:
+    gh pr create --title "{{title}}" --fill
+    @echo "✓ PR created!"
+
+# タスク完了（mainにマージ後、ブランチ削除）
+task-done:
+    git checkout main
+    git pull
+    git branch -d @{-1}
+    @echo "✓ Task completed and branch deleted"
