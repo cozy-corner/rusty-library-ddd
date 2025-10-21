@@ -93,3 +93,28 @@
 - **コンテキスト境界**: 他の集約はIDで参照、ポート経由で依存
 
 詳細は各ドキュメント（`doc/`）を参照してください。
+
+## 環境要件
+
+### 必須環境
+
+- **Rust**: edition 2024
+- **PostgreSQL**: 17
+
+### 主要な依存ライブラリ
+
+- **Webフレームワーク**: Axum
+- **非同期ランタイム**: Tokio
+- **データベースアクセス**: sqlx
+- **シリアライゼーション**: serde
+- **日時処理**: chrono
+- **ID生成**: uuid
+
+### 開発ツール
+
+- **品質管理**: cargo-husky（pre-commit hook）
+  - Format check: `cargo fmt`
+  - Lint: `cargo clippy`
+  - Test: `cargo test`
+
+詳細なバージョンは `Cargo.toml` を参照してください。
