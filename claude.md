@@ -134,7 +134,7 @@ feature/<phase>/<task-name>
 
 **Phase単位でのタスク管理:**
 - 各Phaseの実装計画から、PR単位のタスクに分割
-- タスクリストは `doc/phase/<phase>_tasks.md` に記載
+- タスクリストは `doc/phase/tasks/<phase番号>.md` に記載
 - 依存関係を明記
 
 ## 開発サイクル
