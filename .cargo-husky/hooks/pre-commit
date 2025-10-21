@@ -1,0 +1,20 @@
+#!/bin/sh
+
+# Exit on error
+set -e
+
+echo "Running pre-commit checks..."
+
+# Format check
+echo "1. Checking code format..."
+cargo fmt --all -- --check
+
+# Lint check
+echo "2. Running clippy..."
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Test
+echo "3. Running tests..."
+cargo test
+
+echo "✓ All checks passed!"
