@@ -147,6 +147,17 @@ impl Default for ExtensionCount {
     }
 }
 
+impl TryFrom<u8> for ExtensionCount {
+    type Error = ExtensionError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value > 1 {
+            return Err(ExtensionError::LimitExceeded);
+        }
+        Ok(Self(value))
+    }
+}
+
 /// 貸出状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LoanStatus {
@@ -271,5 +282,27 @@ mod tests {
         let id1 = StaffId::new();
         let id2 = StaffId::new();
         assert_ne!(id1, id2);
+    }
+
+    // TDD: ExtensionCount TryFrom のテスト
+    #[test]
+    fn test_extension_count_try_from_valid() {
+        let count = ExtensionCount::try_from(0);
+        assert!(count.is_ok());
+        assert_eq!(count.unwrap().value(), 0);
+
+        let count = ExtensionCount::try_from(1);
+        assert!(count.is_ok());
+        assert_eq!(count.unwrap().value(), 1);
+    }
+
+    #[test]
+    fn test_extension_count_try_from_invalid() {
+        let count = ExtensionCount::try_from(2);
+        assert!(count.is_err());
+        assert_eq!(count.unwrap_err(), ExtensionError::LimitExceeded);
+
+        let count = ExtensionCount::try_from(255);
+        assert!(count.is_err());
     }
 }

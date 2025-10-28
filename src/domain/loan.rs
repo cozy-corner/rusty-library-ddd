@@ -210,12 +210,19 @@ pub fn apply_event(loan: Loan, event: &DomainEvent) -> Loan {
             created_at: e.loaned_at,
             updated_at: e.loaned_at,
         },
-        DomainEvent::LoanExtended(e) => Loan {
-            due_date: e.new_due_date,
-            extension_count: ExtensionCount::new().increment().unwrap_or_default(),
-            updated_at: e.extended_at,
-            ..loan
-        },
+        DomainEvent::LoanExtended(e) => {
+            // イベントの extension_count を信頼のソースとして使用
+            // イベントソーシングでは、イベントに記録された値が真実
+            let extension_count = ExtensionCount::try_from(e.extension_count)
+                .expect("Invalid extension_count in persisted event");
+
+            Loan {
+                due_date: e.new_due_date,
+                extension_count,
+                updated_at: e.extended_at,
+                ..loan
+            }
+        }
         DomainEvent::BookReturned(e) => Loan {
             returned_at: Some(e.returned_at),
             status: LoanStatus::Returned,
