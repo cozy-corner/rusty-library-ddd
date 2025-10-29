@@ -11,6 +11,108 @@ use super::{
 /// 貸出期間（日数）
 pub const LOAN_PERIOD_DAYS: i64 = 14;
 
+// ============================================================================
+// 型安全な状態パターン
+// ============================================================================
+
+/// Loan集約の共通フィールド
+///
+/// すべての貸出状態（Active, Overdue, Returned）で共有されるコアデータ。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoanCore {
+    // 識別子
+    pub loan_id: LoanId,
+
+    // 他の集約への参照（IDのみ）
+    pub book_id: BookId,
+    pub member_id: MemberId,
+
+    // 貸出管理の責務
+    pub loaned_at: DateTime<Utc>,
+    pub due_date: DateTime<Utc>,
+    pub extension_count: ExtensionCount,
+
+    // 監査情報
+    pub created_by: StaffId,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// 貸出中状態
+///
+/// ビジネスルール：
+/// - 返却期限内
+/// - 延長可能（extension_count < 1）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveLoan {
+    #[serde(flatten)]
+    pub core: LoanCore,
+}
+
+impl std::ops::Deref for ActiveLoan {
+    type Target = LoanCore;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
+}
+
+/// 延滞中状態
+///
+/// ビジネスルール：
+/// - 返却期限を過ぎている
+/// - 延長不可
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OverdueLoan {
+    #[serde(flatten)]
+    pub core: LoanCore,
+}
+
+impl std::ops::Deref for OverdueLoan {
+    type Target = LoanCore;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
+}
+
+/// 返却済み状態
+///
+/// ビジネスルール：
+/// - returned_atが必須（型で保証）
+/// - 操作不可（読み取り専用）
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReturnedLoan {
+    #[serde(flatten)]
+    pub core: LoanCore,
+    pub returned_at: DateTime<Utc>,
+}
+
+impl std::ops::Deref for ReturnedLoan {
+    type Target = LoanCore;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core
+    }
+}
+
+/// Loan集約の統合型（V2）
+///
+/// 型安全な状態パターン：
+/// - 不正な状態を型システムで排除
+/// - 状態遷移を明示的に表現
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status")]
+pub enum LoanV2 {
+    Active(ActiveLoan),
+    Overdue(OverdueLoan),
+    Returned(ReturnedLoan),
+}
+
+// ============================================================================
+// 既存のLoan実装（段階的に移行予定）
+// ============================================================================
+
 /// Loan集約 - 1冊の書籍の1回の貸出
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Loan {
@@ -643,5 +745,163 @@ mod tests {
         assert_eq!(loan.status, LoanStatus::Returned);
         assert_eq!(loan.extension_count.value(), 1);
         assert!(loan.returned_at.is_some());
+    }
+
+    // ========================================================================
+    // 型安全な状態パターンのテスト
+    // ========================================================================
+
+    #[test]
+    fn test_active_loan_creation_and_deref() {
+        let loan_id = LoanId::new();
+        let book_id = BookId::new();
+        let member_id = MemberId::new();
+        let staff_id = StaffId::new();
+        let loaned_at = Utc::now();
+        let due_date = loaned_at + Duration::days(14);
+
+        let active_loan = ActiveLoan {
+            core: LoanCore {
+                loan_id,
+                book_id,
+                member_id,
+                loaned_at,
+                due_date,
+                extension_count: ExtensionCount::new(),
+                created_by: staff_id,
+                created_at: loaned_at,
+                updated_at: loaned_at,
+            },
+        };
+
+        // Derefでcore.loan_idに直接アクセスできることを確認
+        assert_eq!(active_loan.loan_id, loan_id);
+        assert_eq!(active_loan.book_id, book_id);
+        assert_eq!(active_loan.member_id, member_id);
+        assert_eq!(active_loan.due_date, due_date);
+        assert_eq!(active_loan.extension_count.value(), 0);
+    }
+
+    #[test]
+    fn test_overdue_loan_creation_and_deref() {
+        let loan_id = LoanId::new();
+        let book_id = BookId::new();
+        let member_id = MemberId::new();
+        let staff_id = StaffId::new();
+        let loaned_at = Utc::now();
+        let due_date = loaned_at + Duration::days(14);
+
+        let overdue_loan = OverdueLoan {
+            core: LoanCore {
+                loan_id,
+                book_id,
+                member_id,
+                loaned_at,
+                due_date,
+                extension_count: ExtensionCount::new(),
+                created_by: staff_id,
+                created_at: loaned_at,
+                updated_at: loaned_at,
+            },
+        };
+
+        // Derefでcore.loan_idに直接アクセスできることを確認
+        assert_eq!(overdue_loan.loan_id, loan_id);
+        assert_eq!(overdue_loan.book_id, book_id);
+        assert_eq!(overdue_loan.extension_count.value(), 0);
+    }
+
+    #[test]
+    fn test_returned_loan_creation_with_returned_at() {
+        let loan_id = LoanId::new();
+        let book_id = BookId::new();
+        let member_id = MemberId::new();
+        let staff_id = StaffId::new();
+        let loaned_at = Utc::now();
+        let due_date = loaned_at + Duration::days(14);
+        let returned_at = loaned_at + Duration::days(7);
+
+        let returned_loan = ReturnedLoan {
+            core: LoanCore {
+                loan_id,
+                book_id,
+                member_id,
+                loaned_at,
+                due_date,
+                extension_count: ExtensionCount::new(),
+                created_by: staff_id,
+                created_at: loaned_at,
+                updated_at: returned_at,
+            },
+            returned_at,
+        };
+
+        // returned_atが必須であることを型システムが保証
+        assert_eq!(returned_loan.returned_at, returned_at);
+        // Derefでcoreフィールドにアクセス可能
+        assert_eq!(returned_loan.loan_id, loan_id);
+        assert_eq!(returned_loan.book_id, book_id);
+    }
+
+    #[test]
+    fn test_loan_v2_pattern_matching() {
+        let loan_id = LoanId::new();
+        let book_id = BookId::new();
+        let member_id = MemberId::new();
+        let staff_id = StaffId::new();
+        let loaned_at = Utc::now();
+        let due_date = loaned_at + Duration::days(14);
+
+        // ActiveLoan
+        let active_loan = ActiveLoan {
+            core: LoanCore {
+                loan_id,
+                book_id,
+                member_id,
+                loaned_at,
+                due_date,
+                extension_count: ExtensionCount::new(),
+                created_by: staff_id,
+                created_at: loaned_at,
+                updated_at: loaned_at,
+            },
+        };
+        let loan_v2 = LoanV2::Active(active_loan.clone());
+
+        match loan_v2 {
+            LoanV2::Active(a) => {
+                assert_eq!(a.loan_id, loan_id);
+            }
+            _ => panic!("Expected Active variant"),
+        }
+
+        // OverdueLoan
+        let overdue_loan = OverdueLoan {
+            core: active_loan.core.clone(),
+        };
+        let loan_v2 = LoanV2::Overdue(overdue_loan);
+
+        match loan_v2 {
+            LoanV2::Overdue(o) => {
+                assert_eq!(o.loan_id, loan_id);
+            }
+            _ => panic!("Expected Overdue variant"),
+        }
+
+        // ReturnedLoan
+        let returned_at = loaned_at + Duration::days(7);
+        let returned_loan = ReturnedLoan {
+            core: active_loan.core.clone(),
+            returned_at,
+        };
+        let loan_v2 = LoanV2::Returned(returned_loan);
+
+        match loan_v2 {
+            LoanV2::Returned(r) => {
+                assert_eq!(r.loan_id, loan_id);
+                assert_eq!(r.returned_at, returned_at);
+            }
+            _ => panic!("Expected Returned variant"),
+        }
     }
 }
