@@ -357,9 +357,10 @@ pub fn extend_loan_v2(
         return Err(ExtendLoanError::ExtensionLimitExceeded);
     }
 
-    // 新しい返却期限を計算
+    // 新しい返却期限を計算（必要な値を先に確保してから move）
+    let loan_id = loan.loan_id;
     let old_due_date = loan.due_date;
-    let new_due_date = loan.due_date + Duration::days(LOAN_PERIOD_DAYS);
+    let new_due_date = old_due_date + Duration::days(LOAN_PERIOD_DAYS);
     let new_extension_count = loan.extension_count.increment()?;
 
     // 新しいActiveLoanを生成
@@ -373,7 +374,7 @@ pub fn extend_loan_v2(
     };
 
     let event = LoanExtended {
-        loan_id: loan.loan_id,
+        loan_id,
         old_due_date,
         new_due_date,
         extended_at,
@@ -397,6 +398,10 @@ pub fn return_book_v2(
 ) -> Result<(ReturnedLoan, BookReturned), ReturnBookError> {
     match loan {
         LoanV2::Active(active) => {
+            // 先にID類を取り出してから core を move
+            let loan_id = active.loan_id;
+            let book_id = active.book_id;
+            let member_id = active.member_id;
             let was_overdue = returned_at > active.due_date;
 
             let returned_loan = ReturnedLoan {
@@ -408,9 +413,9 @@ pub fn return_book_v2(
             };
 
             let event = BookReturned {
-                loan_id: active.loan_id,
-                book_id: active.book_id,
-                member_id: active.member_id,
+                loan_id,
+                book_id,
+                member_id,
                 returned_at,
                 was_overdue,
             };
@@ -418,6 +423,11 @@ pub fn return_book_v2(
             Ok((returned_loan, event))
         }
         LoanV2::Overdue(overdue) => {
+            // 先にID類を取り出してから core を move
+            let loan_id = overdue.loan_id;
+            let book_id = overdue.book_id;
+            let member_id = overdue.member_id;
+
             let returned_loan = ReturnedLoan {
                 core: LoanCore {
                     updated_at: returned_at,
@@ -427,9 +437,9 @@ pub fn return_book_v2(
             };
 
             let event = BookReturned {
-                loan_id: overdue.loan_id,
-                book_id: overdue.book_id,
-                member_id: overdue.member_id,
+                loan_id,
+                book_id,
+                member_id,
                 returned_at,
                 was_overdue: true,
             };
