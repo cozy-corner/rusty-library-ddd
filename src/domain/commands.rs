@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::{BookId, LoanId, MemberId, StaffId};
 
 /// コマンド：書籍を貸し出す
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoanBook {
     pub book_id: BookId,
@@ -13,6 +14,7 @@ pub struct LoanBook {
 }
 
 /// コマンド：貸出を延長する
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtendLoan {
     pub loan_id: LoanId,
@@ -20,6 +22,7 @@ pub struct ExtendLoan {
 }
 
 /// コマンド：書籍を返却する
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReturnBook {
     pub loan_id: LoanId,
