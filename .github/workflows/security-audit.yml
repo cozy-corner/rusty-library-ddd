@@ -1,0 +1,28 @@
+name: Security Audit
+
+on:
+  # Run on PR
+  pull_request:
+    branches:
+      - main
+  # Run weekly on main branch
+  schedule:
+    - cron: '0 0 * * 0' # Every Sunday at 00:00 UTC
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
