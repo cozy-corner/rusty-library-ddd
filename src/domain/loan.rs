@@ -136,25 +136,6 @@ pub struct Loan {
     pub updated_at: DateTime<Utc>,
 }
 
-impl Loan {
-    /// 空のLoanを作成（イベントソーシング用）
-    pub fn empty() -> Self {
-        Self {
-            loan_id: LoanId::new(),
-            book_id: BookId::new(),
-            member_id: MemberId::new(),
-            loaned_at: Utc::now(),
-            due_date: Utc::now(),
-            returned_at: None,
-            extension_count: ExtensionCount::new(),
-            status: LoanStatus::Active,
-            created_by: StaffId::new(),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-}
-
 /// 純粋関数：書籍を貸し出す
 ///
 /// ビジネスルール：
@@ -464,46 +445,104 @@ pub fn is_overdue_v2(loan: &LoanV2, now: DateTime<Utc>) -> bool {
 /// イベントを適用して新しい状態を生成する純粋関数
 ///
 /// イベントソーシングのfoldパターンで使用される。
-/// 元の状態を変更せず、新しいLoanインスタンスを返す。
-pub fn apply_event(loan: Loan, event: &DomainEvent) -> Loan {
-    match event {
-        DomainEvent::BookLoaned(e) => Loan {
-            loan_id: e.loan_id,
-            book_id: e.book_id,
-            member_id: e.member_id,
-            loaned_at: e.loaned_at,
-            due_date: e.due_date,
-            returned_at: None,
-            extension_count: ExtensionCount::new(),
-            status: LoanStatus::Active,
-            created_by: e.loaned_by,
-            created_at: e.loaned_at,
-            updated_at: e.loaned_at,
-        },
-        DomainEvent::LoanExtended(e) => {
-            // イベントの extension_count を信頼のソースとして使用
-            // イベントソーシングでは、イベントに記録された値が真実
+/// 型安全な状態遷移を実装。不正な遷移はpanicする。
+///
+/// # 引数
+/// * `loan` - 現在の貸出状態（Noneは初期状態）
+/// * `event` - 適用するドメインイベント
+///
+/// # 戻り値
+/// 新しい貸出状態
+///
+/// # Panics
+/// 不正な状態遷移（例: Returned状態からの延長）の場合にpanicする
+pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
+    match (loan, event) {
+        // BookLoaned: 初期状態（None）からのみ受け入れる
+        (None, DomainEvent::BookLoaned(e)) => LoanV2::Active(ActiveLoan {
+            core: LoanCore {
+                loan_id: e.loan_id,
+                book_id: e.book_id,
+                member_id: e.member_id,
+                loaned_at: e.loaned_at,
+                due_date: e.due_date,
+                extension_count: ExtensionCount::new(),
+                created_by: e.loaned_by,
+                created_at: e.loaned_at,
+                updated_at: e.loaned_at,
+            },
+        }),
+        (Some(_), DomainEvent::BookLoaned(e)) => panic!(
+            "Invalid state transition: BookLoaned({:?}) cannot apply to an existing loan",
+            e.loan_id
+        ),
+
+        // LoanExtended: Active状態からのみ可能
+        (Some(LoanV2::Active(active)), DomainEvent::LoanExtended(e)) => {
+            assert_eq!(
+                active.loan_id, e.loan_id,
+                "LoanExtended loan_id does not match current loan"
+            );
             let extension_count = ExtensionCount::try_from(e.extension_count)
                 .expect("Invalid extension_count in persisted event");
 
-            Loan {
-                due_date: e.new_due_date,
-                extension_count,
-                updated_at: e.extended_at,
-                ..loan
-            }
+            LoanV2::Active(ActiveLoan {
+                core: LoanCore {
+                    due_date: e.new_due_date,
+                    extension_count,
+                    updated_at: e.extended_at,
+                    ..active.core
+                },
+            })
         }
-        DomainEvent::BookReturned(e) => Loan {
-            returned_at: Some(e.returned_at),
-            status: LoanStatus::Returned,
-            updated_at: e.returned_at,
-            ..loan
-        },
-        DomainEvent::LoanBecameOverdue(e) => Loan {
-            status: LoanStatus::Overdue,
-            updated_at: e.detected_at,
-            ..loan
-        },
+
+        // BookReturned: ActiveまたはOverdue状態から可能
+        (Some(LoanV2::Active(active)), DomainEvent::BookReturned(e)) => {
+            assert_eq!(
+                active.loan_id, e.loan_id,
+                "BookReturned loan_id does not match current loan"
+            );
+            LoanV2::Returned(ReturnedLoan {
+                core: LoanCore {
+                    updated_at: e.returned_at,
+                    ..active.core
+                },
+                returned_at: e.returned_at,
+            })
+        }
+        (Some(LoanV2::Overdue(overdue)), DomainEvent::BookReturned(e)) => {
+            assert_eq!(
+                overdue.loan_id, e.loan_id,
+                "BookReturned loan_id does not match current loan"
+            );
+            LoanV2::Returned(ReturnedLoan {
+                core: LoanCore {
+                    updated_at: e.returned_at,
+                    ..overdue.core
+                },
+                returned_at: e.returned_at,
+            })
+        }
+
+        // LoanBecameOverdue: Active状態からのみ可能
+        (Some(LoanV2::Active(active)), DomainEvent::LoanBecameOverdue(e)) => {
+            assert_eq!(
+                active.loan_id, e.loan_id,
+                "LoanBecameOverdue loan_id does not match current loan"
+            );
+            LoanV2::Overdue(OverdueLoan {
+                core: LoanCore {
+                    updated_at: e.detected_at,
+                    ..active.core
+                },
+            })
+        }
+
+        // 不正な状態遷移
+        (loan, event) => panic!(
+            "Invalid state transition: loan={:?}, event={:?}",
+            loan, event
+        ),
     }
 }
 
@@ -519,13 +558,10 @@ pub fn apply_event(loan: Loan, event: &DomainEvent) -> Loan {
 /// # 戻り値
 /// * イベントが空の場合は`None`
 /// * それ以外は復元されたLoanを`Some`で返す
-pub fn replay_events(events: &[DomainEvent]) -> Option<Loan> {
-    if events.is_empty() {
-        return None;
-    }
-
-    let initial = Loan::empty();
-    Some(events.iter().fold(initial, apply_event))
+pub fn replay_events(events: &[DomainEvent]) -> Option<LoanV2> {
+    events
+        .iter()
+        .fold(None, |loan, event| Some(apply_event(loan, event)))
 }
 
 #[cfg(test)]
@@ -767,29 +803,32 @@ mod tests {
             loaned_by: staff_id,
         });
 
-        let loan = apply_event(Loan::empty(), &event);
+        let loan = apply_event(None, &event);
 
-        assert_eq!(loan.loan_id, loan_id);
-        assert_eq!(loan.book_id, book_id);
-        assert_eq!(loan.member_id, member_id);
-        assert_eq!(loan.loaned_at, loaned_at);
-        assert_eq!(loan.due_date, due_date);
-        assert_eq!(loan.status, LoanStatus::Active);
-        assert_eq!(loan.extension_count.value(), 0);
+        // LoanV2::Activeが返されることを確認
+        match loan {
+            LoanV2::Active(active) => {
+                assert_eq!(active.loan_id, loan_id);
+                assert_eq!(active.book_id, book_id);
+                assert_eq!(active.member_id, member_id);
+                assert_eq!(active.loaned_at, loaned_at);
+                assert_eq!(active.due_date, due_date);
+                assert_eq!(active.extension_count.value(), 0);
+            }
+            _ => panic!("Expected LoanV2::Active"),
+        }
     }
 
     #[test]
     fn test_apply_event_loan_extended() {
-        let loan_id = LoanId::new();
         let book_id = BookId::new();
         let member_id = MemberId::new();
         let staff_id = StaffId::new();
         let loaned_at = Utc::now();
 
-        let (mut loan, _) = loan_book(book_id, member_id, loaned_at, staff_id).unwrap();
-        loan.loan_id = loan_id;
-
-        let old_due_date = loan.due_date;
+        let (active_loan, _) = loan_book_v2(book_id, member_id, loaned_at, staff_id).unwrap();
+        let loan_id = active_loan.loan_id;
+        let old_due_date = active_loan.due_date;
         let new_due_date = old_due_date + Duration::days(14);
         let extended_at = loaned_at + Duration::days(5);
 
@@ -801,24 +840,28 @@ mod tests {
             extension_count: 1,
         });
 
-        let new_loan = apply_event(loan, &event);
+        let new_loan = apply_event(Some(LoanV2::Active(active_loan)), &event);
 
-        assert_eq!(new_loan.due_date, new_due_date);
-        assert_eq!(new_loan.extension_count.value(), 1);
-        assert_eq!(new_loan.updated_at, extended_at);
+        // LoanV2::Activeが返されることを確認
+        match new_loan {
+            LoanV2::Active(active) => {
+                assert_eq!(active.due_date, new_due_date);
+                assert_eq!(active.extension_count.value(), 1);
+                assert_eq!(active.updated_at, extended_at);
+            }
+            _ => panic!("Expected LoanV2::Active"),
+        }
     }
 
     #[test]
     fn test_apply_event_book_returned() {
-        let loan_id = LoanId::new();
         let book_id = BookId::new();
         let member_id = MemberId::new();
         let staff_id = StaffId::new();
         let loaned_at = Utc::now();
 
-        let (mut loan, _) = loan_book(book_id, member_id, loaned_at, staff_id).unwrap();
-        loan.loan_id = loan_id;
-
+        let (active_loan, _) = loan_book_v2(book_id, member_id, loaned_at, staff_id).unwrap();
+        let loan_id = active_loan.loan_id;
         let returned_at = loaned_at + Duration::days(7);
 
         let event = DomainEvent::BookReturned(BookReturned {
@@ -829,44 +872,53 @@ mod tests {
             was_overdue: false,
         });
 
-        let new_loan = apply_event(loan, &event);
+        let new_loan = apply_event(Some(LoanV2::Active(active_loan)), &event);
 
-        assert_eq!(new_loan.returned_at, Some(returned_at));
-        assert_eq!(new_loan.status, LoanStatus::Returned);
-        assert_eq!(new_loan.updated_at, returned_at);
+        // LoanV2::Returnedが返されることを確認
+        match new_loan {
+            LoanV2::Returned(returned) => {
+                assert_eq!(returned.returned_at, returned_at);
+                assert_eq!(returned.updated_at, returned_at);
+            }
+            _ => panic!("Expected LoanV2::Returned"),
+        }
     }
 
     #[test]
     fn test_apply_event_loan_became_overdue() {
-        let loan_id = LoanId::new();
         let book_id = BookId::new();
         let member_id = MemberId::new();
         let staff_id = StaffId::new();
         let loaned_at = Utc::now();
 
-        let (mut loan, _) = loan_book(book_id, member_id, loaned_at, staff_id).unwrap();
-        loan.loan_id = loan_id;
-
+        let (active_loan, _) = loan_book_v2(book_id, member_id, loaned_at, staff_id).unwrap();
+        let loan_id = active_loan.loan_id;
         let detected_at = loaned_at + Duration::days(20);
 
         let event = DomainEvent::LoanBecameOverdue(LoanBecameOverdue {
             loan_id,
             book_id,
             member_id,
-            due_date: loan.due_date,
+            due_date: active_loan.due_date,
             detected_at,
         });
 
-        let new_loan = apply_event(loan, &event);
+        let new_loan = apply_event(Some(LoanV2::Active(active_loan)), &event);
 
-        assert_eq!(new_loan.status, LoanStatus::Overdue);
-        assert_eq!(new_loan.updated_at, detected_at);
+        // LoanV2::Overdueが返されることを確認
+        match new_loan {
+            LoanV2::Overdue(overdue) => {
+                assert_eq!(overdue.updated_at, detected_at);
+            }
+            _ => panic!("Expected LoanV2::Overdue"),
+        }
     }
 
     #[test]
     fn test_replay_events_empty() {
         let events = vec![];
         let result = replay_events(&events);
+        // 空のイベント列はNoneを返す
         assert!(result.is_none());
     }
 
@@ -878,6 +930,7 @@ mod tests {
         let staff_id = StaffId::new();
         let loaned_at = Utc::now();
         let due_date = loaned_at + Duration::days(14);
+        let returned_at = loaned_at + Duration::days(20);
 
         // イベント列を作成：貸出 → 延長 → 返却
         let events = vec![
@@ -900,7 +953,7 @@ mod tests {
                 loan_id,
                 book_id,
                 member_id,
-                returned_at: loaned_at + Duration::days(20),
+                returned_at,
                 was_overdue: false,
             }),
         ];
@@ -909,10 +962,16 @@ mod tests {
         assert!(result.is_some());
 
         let loan = result.unwrap();
-        assert_eq!(loan.loan_id, loan_id);
-        assert_eq!(loan.status, LoanStatus::Returned);
-        assert_eq!(loan.extension_count.value(), 1);
-        assert!(loan.returned_at.is_some());
+
+        // 最終的にLoanV2::Returnedになることを確認
+        match loan {
+            LoanV2::Returned(returned) => {
+                assert_eq!(returned.loan_id, loan_id);
+                assert_eq!(returned.extension_count.value(), 1);
+                assert_eq!(returned.returned_at, returned_at);
+            }
+            _ => panic!("Expected LoanV2::Returned"),
+        }
     }
 
     // ========================================================================
