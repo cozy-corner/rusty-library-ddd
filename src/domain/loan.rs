@@ -458,8 +458,8 @@ pub fn is_overdue_v2(loan: &LoanV2, now: DateTime<Utc>) -> bool {
 /// 不正な状態遷移（例: Returned状態からの延長）の場合にpanicする
 pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
     match (loan, event) {
-        // BookLoaned: 常に新しいActiveLoanを生成
-        (_, DomainEvent::BookLoaned(e)) => LoanV2::Active(ActiveLoan {
+        // BookLoaned: 初期状態（None）からのみ受け入れる
+        (None, DomainEvent::BookLoaned(e)) => LoanV2::Active(ActiveLoan {
             core: LoanCore {
                 loan_id: e.loan_id,
                 book_id: e.book_id,
@@ -472,6 +472,10 @@ pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
                 updated_at: e.loaned_at,
             },
         }),
+        (Some(_), DomainEvent::BookLoaned(e)) => panic!(
+            "Invalid state transition: BookLoaned({:?}) cannot apply to an existing loan",
+            e.loan_id
+        ),
 
         // LoanExtended: Active状態からのみ可能
         (Some(LoanV2::Active(active)), DomainEvent::LoanExtended(e)) => {
