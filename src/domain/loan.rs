@@ -559,16 +559,9 @@ pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
 /// * イベントが空の場合は`None`
 /// * それ以外は復元されたLoanを`Some`で返す
 pub fn replay_events(events: &[DomainEvent]) -> Option<LoanV2> {
-    if events.is_empty() {
-        return None;
-    }
-
-    Some(
-        events
-            .iter()
-            .fold(None, |loan, event| Some(apply_event(loan, event))),
-    )
-    .flatten()
+    events
+        .iter()
+        .fold(None, |loan, event| Some(apply_event(loan, event)))
 }
 
 #[cfg(test)]
