@@ -475,6 +475,10 @@ pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
 
         // LoanExtended: Active状態からのみ可能
         (Some(LoanV2::Active(active)), DomainEvent::LoanExtended(e)) => {
+            assert_eq!(
+                active.loan_id, e.loan_id,
+                "LoanExtended loan_id does not match current loan"
+            );
             let extension_count = ExtensionCount::try_from(e.extension_count)
                 .expect("Invalid extension_count in persisted event");
 
@@ -490,6 +494,10 @@ pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
 
         // BookReturned: ActiveまたはOverdue状態から可能
         (Some(LoanV2::Active(active)), DomainEvent::BookReturned(e)) => {
+            assert_eq!(
+                active.loan_id, e.loan_id,
+                "BookReturned loan_id does not match current loan"
+            );
             LoanV2::Returned(ReturnedLoan {
                 core: LoanCore {
                     updated_at: e.returned_at,
@@ -499,6 +507,10 @@ pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
             })
         }
         (Some(LoanV2::Overdue(overdue)), DomainEvent::BookReturned(e)) => {
+            assert_eq!(
+                overdue.loan_id, e.loan_id,
+                "BookReturned loan_id does not match current loan"
+            );
             LoanV2::Returned(ReturnedLoan {
                 core: LoanCore {
                     updated_at: e.returned_at,
@@ -510,6 +522,10 @@ pub fn apply_event(loan: Option<LoanV2>, event: &DomainEvent) -> LoanV2 {
 
         // LoanBecameOverdue: Active状態からのみ可能
         (Some(LoanV2::Active(active)), DomainEvent::LoanBecameOverdue(e)) => {
+            assert_eq!(
+                active.loan_id, e.loan_id,
+                "LoanBecameOverdue loan_id does not match current loan"
+            );
             LoanV2::Overdue(OverdueLoan {
                 core: LoanCore {
                     updated_at: e.detected_at,
@@ -808,13 +824,13 @@ mod tests {
 
     #[test]
     fn test_apply_event_loan_extended() {
-        let loan_id = LoanId::new();
         let book_id = BookId::new();
         let member_id = MemberId::new();
         let staff_id = StaffId::new();
         let loaned_at = Utc::now();
 
         let (active_loan, _) = loan_book_v2(book_id, member_id, loaned_at, staff_id).unwrap();
+        let loan_id = active_loan.loan_id;
         let old_due_date = active_loan.due_date;
         let new_due_date = old_due_date + Duration::days(14);
         let extended_at = loaned_at + Duration::days(5);
@@ -842,13 +858,13 @@ mod tests {
 
     #[test]
     fn test_apply_event_book_returned() {
-        let loan_id = LoanId::new();
         let book_id = BookId::new();
         let member_id = MemberId::new();
         let staff_id = StaffId::new();
         let loaned_at = Utc::now();
 
         let (active_loan, _) = loan_book_v2(book_id, member_id, loaned_at, staff_id).unwrap();
+        let loan_id = active_loan.loan_id;
         let returned_at = loaned_at + Duration::days(7);
 
         let event = DomainEvent::BookReturned(BookReturned {
@@ -873,13 +889,13 @@ mod tests {
 
     #[test]
     fn test_apply_event_loan_became_overdue() {
-        let loan_id = LoanId::new();
         let book_id = BookId::new();
         let member_id = MemberId::new();
         let staff_id = StaffId::new();
         let loaned_at = Utc::now();
 
         let (active_loan, _) = loan_book_v2(book_id, member_id, loaned_at, staff_id).unwrap();
+        let loan_id = active_loan.loan_id;
         let detected_at = loaned_at + Duration::days(20);
 
         let event = DomainEvent::LoanBecameOverdue(LoanBecameOverdue {
