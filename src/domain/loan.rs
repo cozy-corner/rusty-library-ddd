@@ -691,7 +691,7 @@ mod tests {
     }
 
     #[test]
-    fn test_loan_v2_pattern_matching() {
+    fn test_loan_pattern_matching() {
         let loan_id = LoanId::new();
         let book_id = BookId::new();
         let member_id = MemberId::new();
@@ -713,9 +713,9 @@ mod tests {
                 updated_at: loaned_at,
             },
         };
-        let loan_v2 = Loan::Active(active_loan.clone());
+        let loan = Loan::Active(active_loan.clone());
 
-        match loan_v2 {
+        match loan {
             Loan::Active(a) => {
                 assert_eq!(a.loan_id, loan_id);
             }
@@ -726,9 +726,9 @@ mod tests {
         let overdue_loan = OverdueLoan {
             core: active_loan.core.clone(),
         };
-        let loan_v2 = Loan::Overdue(overdue_loan);
+        let loan = Loan::Overdue(overdue_loan);
 
-        match loan_v2 {
+        match loan {
             Loan::Overdue(o) => {
                 assert_eq!(o.loan_id, loan_id);
             }
@@ -741,9 +741,9 @@ mod tests {
             core: active_loan.core.clone(),
             returned_at,
         };
-        let loan_v2 = Loan::Returned(returned_loan);
+        let loan = Loan::Returned(returned_loan);
 
-        match loan_v2 {
+        match loan {
             Loan::Returned(r) => {
                 assert_eq!(r.loan_id, loan_id);
                 assert_eq!(r.returned_at, returned_at);
@@ -753,7 +753,7 @@ mod tests {
     }
 
     // ========================================================================
-    // V2純粋関数のテスト
+    // 純粋関数のテスト
     // ========================================================================
 
     // TDD: loan_book() のテスト
