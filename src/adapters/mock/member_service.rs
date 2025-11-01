@@ -4,10 +4,10 @@ use async_trait::async_trait;
 use std::collections::HashSet;
 use std::sync::Mutex;
 
-/// Mock implementation of MemberService
+/// MemberServiceのモック実装
 ///
-/// Supports stateful testing by storing member IDs.
-/// Can register members and mark them as having overdue loans.
+/// 会員IDを保存することで状態を持ったテストをサポート。
+/// 会員登録や延滞マークが可能。
 #[allow(dead_code)]
 pub struct MemberService {
     existing_members: Mutex<HashSet<MemberId>>,
@@ -23,12 +23,12 @@ impl MemberService {
         }
     }
 
-    /// Add a member for testing purposes
+    /// テスト用に会員を登録
     pub fn add_member(&self, member_id: MemberId) {
         self.existing_members.lock().unwrap().insert(member_id);
     }
 
-    /// Mark a member as having overdue loans for testing purposes
+    /// テスト用に会員を延滞状態にマーク
     pub fn mark_overdue(&self, member_id: MemberId) {
         self.overdue_members.lock().unwrap().insert(member_id);
     }
@@ -42,12 +42,12 @@ impl Default for MemberService {
 
 #[async_trait]
 impl MemberServiceTrait for MemberService {
-    /// Check if member exists in the registered members
+    /// 登録された会員の中に存在するかチェック
     async fn exists(&self, member_id: MemberId) -> Result<bool> {
         Ok(self.existing_members.lock().unwrap().contains(&member_id))
     }
 
-    /// Check if member has overdue loans
+    /// 会員が延滞中の貸出を持っているかチェック
     async fn has_overdue_loans(&self, member_id: MemberId) -> Result<bool> {
         Ok(self.overdue_members.lock().unwrap().contains(&member_id))
     }
