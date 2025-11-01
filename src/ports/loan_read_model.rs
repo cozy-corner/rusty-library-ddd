@@ -29,7 +29,7 @@ impl LoanStatus {
     }
 
     /// 文字列から変換する
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "active" => Some(LoanStatus::Active),

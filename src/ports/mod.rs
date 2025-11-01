@@ -9,7 +9,7 @@ pub mod member_service;
 #[allow(unused_imports)]
 pub mod notification_service;
 
-#[allow(unused_imports)]
+#[allow(unused_imports, ambiguous_glob_reexports)]
 pub use book_service::*;
 #[allow(unused_imports)]
 pub use event_store::*;

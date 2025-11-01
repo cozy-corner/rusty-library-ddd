@@ -12,3 +12,4 @@ futures = "0.3"
 
 [dev-dependencies]
 cargo-husky = { version = "1", features = ["user-hooks"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
