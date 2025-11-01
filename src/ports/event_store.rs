@@ -28,5 +28,5 @@ pub trait EventStore: Send + Sync {
     ///
     /// 延滞検知などのバッチ操作に使用される。
     /// イベントは挿入順にストリーム配信される。
-    fn stream_all(&self) -> BoxStream<'static, Result<DomainEvent>>;
+    fn stream_all(&self) -> BoxStream<'_, Result<DomainEvent>>;
 }
