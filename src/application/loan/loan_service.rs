@@ -52,6 +52,57 @@ async fn load_loan(
     domain::loan::replay_events(&events).ok_or(LoanApplicationError::LoanNotFound)
 }
 
+/// 貸出集約からRead Model用のビューを構築するヘルパー関数
+///
+/// イベントソーシングの原則に従い、集約の完全な状態を
+/// Read Modelのビューとして変換する。
+///
+/// # 引数
+/// * `loan` - 貸出集約（Active/Overdue/Returned）
+///
+/// # 戻り値
+/// Read Model用の完全な貸出ビュー
+pub(super) fn build_loan_view(loan: &domain::loan::Loan) -> LoanView {
+    match loan {
+        domain::loan::Loan::Active(active) => LoanView {
+            loan_id: active.loan_id,
+            book_id: active.book_id,
+            member_id: active.member_id,
+            loaned_at: active.loaned_at,
+            due_date: active.due_date,
+            returned_at: None,
+            extension_count: active.extension_count.value(),
+            status: LoanStatus::Active,
+            created_at: active.created_at,
+            updated_at: active.updated_at,
+        },
+        domain::loan::Loan::Overdue(overdue) => LoanView {
+            loan_id: overdue.loan_id,
+            book_id: overdue.book_id,
+            member_id: overdue.member_id,
+            loaned_at: overdue.loaned_at,
+            due_date: overdue.due_date,
+            returned_at: None,
+            extension_count: overdue.extension_count.value(),
+            status: LoanStatus::Overdue,
+            created_at: overdue.created_at,
+            updated_at: overdue.updated_at,
+        },
+        domain::loan::Loan::Returned(returned) => LoanView {
+            loan_id: returned.loan_id,
+            book_id: returned.book_id,
+            member_id: returned.member_id,
+            loaned_at: returned.loaned_at,
+            due_date: returned.due_date,
+            returned_at: Some(returned.returned_at),
+            extension_count: returned.extension_count.value(),
+            status: LoanStatus::Returned,
+            created_at: returned.created_at,
+            updated_at: returned.updated_at,
+        },
+    }
+}
+
 /// 書籍を貸し出す（純粋な関数）
 ///
 /// ビジネスルール：
@@ -140,22 +191,10 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
         .await
         .map_err(LoanApplicationError::EventStoreError)?;
 
-    // 7. Read Modelを更新
-    let loan_view = LoanView {
-        loan_id,
-        book_id: active_loan.book_id,
-        member_id: active_loan.member_id,
-        loaned_at: active_loan.loaned_at,
-        due_date: active_loan.due_date,
-        returned_at: None,
-        extension_count: active_loan.extension_count.value(),
-        status: LoanStatus::Active,
-        created_at: active_loan.created_at,
-        updated_at: active_loan.updated_at,
-    };
-
+    // 7. Read Modelを更新（完全な状態を保存）
+    let loan_view = build_loan_view(&domain::loan::Loan::Active(active_loan));
     deps.loan_read_model
-        .insert(loan_view)
+        .save(loan_view)
         .await
         .map_err(LoanApplicationError::ReadModelError)?;
 
@@ -199,7 +238,7 @@ pub async fn extend_loan(deps: &ServiceDependencies, cmd: ExtendLoan) -> Result<
     };
 
     // 3. ドメイン層の純粋関数を呼び出し
-    let (_, event) = domain::loan::extend_loan(active_loan, cmd.extended_at)
+    let (updated_loan, event) = domain::loan::extend_loan(active_loan, cmd.extended_at)
         .map_err(|e| LoanApplicationError::DomainError(format!("{:?}", e)))?;
 
     // 4. イベントストアに保存
@@ -208,9 +247,10 @@ pub async fn extend_loan(deps: &ServiceDependencies, cmd: ExtendLoan) -> Result<
         .await
         .map_err(LoanApplicationError::EventStoreError)?;
 
-    // 5. Read Modelを更新
+    // 5. Read Modelを更新（完全な状態を保存）
+    let loan_view = build_loan_view(&domain::loan::Loan::Active(updated_loan));
     deps.loan_read_model
-        .update_due_date(cmd.loan_id, event.new_due_date)
+        .save(loan_view)
         .await
         .map_err(LoanApplicationError::ReadModelError)?;
 
@@ -239,7 +279,7 @@ pub async fn return_book(deps: &ServiceDependencies, cmd: ReturnBook) -> Result<
     let loan = load_loan(&deps.event_store, cmd.loan_id).await?;
 
     // 2. ドメイン層の純粋関数を呼び出し
-    let (_, event) = domain::loan::return_book(loan, cmd.returned_at)
+    let (returned_loan, event) = domain::loan::return_book(loan, cmd.returned_at)
         .map_err(|e| LoanApplicationError::DomainError(format!("{:?}", e)))?;
 
     // 3. イベントストアに保存
@@ -248,9 +288,10 @@ pub async fn return_book(deps: &ServiceDependencies, cmd: ReturnBook) -> Result<
         .await
         .map_err(LoanApplicationError::EventStoreError)?;
 
-    // 4. Read Modelを更新
+    // 4. Read Modelを更新（完全な状態を保存）
+    let loan_view = build_loan_view(&domain::loan::Loan::Returned(returned_loan));
     deps.loan_read_model
-        .update_status(cmd.loan_id, LoanStatus::Returned, Some(event.returned_at))
+        .save(loan_view)
         .await
         .map_err(LoanApplicationError::ReadModelError)?;
 

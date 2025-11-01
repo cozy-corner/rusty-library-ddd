@@ -1,8 +1,7 @@
 use crate::domain::{self, events::*};
-use crate::ports::*;
 
 use super::errors::{LoanApplicationError, Result};
-use super::loan_service::ServiceDependencies;
+use super::loan_service::{ServiceDependencies, build_loan_view};
 
 /// 延滞検出バッチ（純粋な関数）
 ///
@@ -83,9 +82,15 @@ pub async fn detect_overdue_loans(deps: &ServiceDependencies) -> Result<usize> {
                         .await
                         .map_err(LoanApplicationError::EventStoreError)?;
 
-                    // Read Modelを更新
+                    // Read Modelを更新（完全な状態を保存）
+                    // イベントを適用して更新後の状態を取得
+                    let updated_loan = domain::loan::apply_event(
+                        Some(domain::loan::Loan::Active(active)),
+                        &DomainEvent::LoanBecameOverdue(event),
+                    );
+                    let loan_view = build_loan_view(&updated_loan);
                     deps.loan_read_model
-                        .update_status(active.loan_id, LoanStatus::Overdue, None)
+                        .save(loan_view)
                         .await
                         .map_err(LoanApplicationError::ReadModelError)?;
 

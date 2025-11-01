@@ -64,35 +64,9 @@ impl InMemoryLoanReadModel {
 
 #[async_trait::async_trait]
 impl LoanReadModel for InMemoryLoanReadModel {
-    async fn insert(&self, loan_view: LoanView) -> loan_read_model::Result<()> {
+    async fn save(&self, loan_view: LoanView) -> loan_read_model::Result<()> {
         let mut loans = self.loans.lock().unwrap();
         loans.insert(loan_view.loan_id, loan_view);
-        Ok(())
-    }
-
-    async fn update_status(
-        &self,
-        loan_id: LoanId,
-        status: LoanStatus,
-        returned_at: Option<chrono::DateTime<Utc>>,
-    ) -> loan_read_model::Result<()> {
-        let mut loans = self.loans.lock().unwrap();
-        if let Some(loan) = loans.get_mut(&loan_id) {
-            loan.status = status;
-            loan.returned_at = returned_at;
-        }
-        Ok(())
-    }
-
-    async fn update_due_date(
-        &self,
-        loan_id: LoanId,
-        new_due_date: chrono::DateTime<Utc>,
-    ) -> loan_read_model::Result<()> {
-        let mut loans = self.loans.lock().unwrap();
-        if let Some(loan) = loans.get_mut(&loan_id) {
-            loan.due_date = new_due_date;
-        }
         Ok(())
     }
 
@@ -260,7 +234,7 @@ async fn test_loan_book_limit_exceeded() {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-        loan_read_model.insert(loan_view).await.unwrap();
+        loan_read_model.save(loan_view).await.unwrap();
     }
 
     // 6冊目を借りようとする
