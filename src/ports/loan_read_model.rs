@@ -64,25 +64,14 @@ pub struct LoanView {
 #[allow(dead_code)]
 #[async_trait]
 pub trait LoanReadModel: Send + Sync {
-    /// 新規貸出ビューレコードを挿入する
+    /// 貸出の現在状態をRead Modelに保存
     ///
-    /// BookLoanedイベント処理時に呼ばれる。
-    async fn insert(&self, loan_view: LoanView) -> Result<()>;
-
-    /// 貸出ステータスと返却日時を更新する
+    /// イベントストアから復元した集約の完全な状態を保存する。
+    /// 新規の場合はINSERT、既存の場合はUPDATE（upsert）を実行する。
     ///
-    /// BookReturnedまたはLoanBecameOverdueイベント処理時に呼ばれる。
-    async fn update_status(
-        &self,
-        loan_id: LoanId,
-        status: LoanStatus,
-        returned_at: Option<DateTime<Utc>>,
-    ) -> Result<()>;
-
-    /// 貸出返却期限を更新する
-    ///
-    /// LoanExtendedイベント処理時に呼ばれる。
-    async fn update_due_date(&self, loan_id: LoanId, new_due_date: DateTime<Utc>) -> Result<()>;
+    /// イベントソーシングの原則として、Read Modelは常にイベントから
+    /// 復元した集約の完全な状態を反映すべきであり、部分更新は行わない。
+    async fn save(&self, loan_view: LoanView) -> Result<()>;
 
     /// 会員の貸出中の貸出を取得する
     ///
