@@ -1,21 +1,13 @@
-#[allow(unused_imports)]
 pub mod book_service;
-#[allow(unused_imports)]
 pub mod event_store;
-#[allow(unused_imports)]
 pub mod loan_read_model;
-#[allow(unused_imports)]
 pub mod member_service;
-#[allow(unused_imports)]
 pub mod notification_service;
 
-#[allow(unused_imports)]
-pub use book_service::*;
-#[allow(unused_imports)]
-pub use event_store::*;
-#[allow(unused_imports)]
-pub use loan_read_model::*;
-#[allow(unused_imports)]
-pub use member_service::*;
-#[allow(unused_imports)]
-pub use notification_service::*;
+// 明示的に型を再エクスポート（Result型の衝突を避けるため、グロブインポートを使わない）
+pub use book_service::BookService;
+pub use event_store::EventStore;
+pub use loan_read_model::{LoanReadModel, LoanStatus, LoanView};
+pub use member_service::MemberService;
+#[allow(unused_imports)] // 将来のAPI層で使用予定
+pub use notification_service::NotificationService;
