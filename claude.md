@@ -196,14 +196,36 @@ Conventional Commitsに従います：
 - `docs`: ドキュメント
 - `chore`: ビルド、ツール設定等
 
-**例:**
-```
-feat: implement ExtensionCount value object
+**良いコミットメッセージの原則:**
+1. **一行目は簡潔に「何をしたか」を記述** (50文字以内推奨)
+   - 具体的な変更内容を動詞で始める
+   - 感情的な表現を避ける（「完璧です！」「修正完了！」等）
+2. **本文は「なぜ」を説明**
+   - コードを見れば分かることは書かない
+   - 変更の動機、背景、影響を記載
+3. **英語で記述**
+   - チーム全体で読める言語を使用
+   - シンプルで明確な表現
 
-- Add ExtensionCount with business rule (max 1 extension)
-- Add increment() with validation
-- Add TDD tests
+**良い例:**
 ```
+refactor: use LoanStatus enum instead of String in LoanView
+
+- Add LoanStatus enum (Active, Overdue, Returned)
+- Change LoanView.status from String to LoanStatus
+- Update update_status signature to accept LoanStatus
+
+This improves type safety and prevents invalid status values.
+```
+
+**悪い例:**
+```
+完璧です！修正が完了しました。
+
+## 修正内容
+LoanStatus enum を追加して...
+```
+理由: 一行目が曖昧、感情的、日本語、何を修正したか不明
 
 ## 環境要件
 
