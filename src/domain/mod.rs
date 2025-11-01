@@ -2,6 +2,7 @@ pub mod commands;
 pub mod errors;
 pub mod events;
 pub mod loan;
+pub mod ports;
 pub mod value_objects;
 
 pub use errors::*;
