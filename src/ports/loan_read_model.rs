@@ -5,6 +5,41 @@ use chrono::{DateTime, Utc};
 #[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+/// 貸出ステータス（Read Model用）
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoanStatus {
+    /// 貸出中
+    Active,
+    /// 延滞中
+    Overdue,
+    /// 返却済み
+    Returned,
+}
+
+impl LoanStatus {
+    /// 文字列表現を取得する
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LoanStatus::Active => "active",
+            LoanStatus::Overdue => "overdue",
+            LoanStatus::Returned => "returned",
+        }
+    }
+
+    /// 文字列から変換する
+    #[allow(dead_code)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "active" => Some(LoanStatus::Active),
+            "overdue" => Some(LoanStatus::Overdue),
+            "returned" => Some(LoanStatus::Returned),
+            _ => None,
+        }
+    }
+}
+
 /// 貸出ビュー（Read Model）
 ///
 /// クエリに最適化された非正規化ビュー（CQRSパターン）。
@@ -19,8 +54,7 @@ pub struct LoanView {
     pub due_date: DateTime<Utc>,
     pub returned_at: Option<DateTime<Utc>>,
     pub extension_count: u8,
-    /// ステータス: "active", "overdue", "returned"
-    pub status: String,
+    pub status: LoanStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -40,7 +74,7 @@ pub trait LoanReadModel: Send + Sync {
     async fn update_status(
         &self,
         loan_id: LoanId,
-        status: &str,
+        status: LoanStatus,
         returned_at: Option<DateTime<Utc>>,
     ) -> Result<()>;
 
