@@ -6,7 +6,6 @@ use chrono::{DateTime, Utc};
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// 貸出ステータス（Read Model用）
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoanStatus {
     /// 貸出中
@@ -27,15 +26,17 @@ impl LoanStatus {
             LoanStatus::Returned => "returned",
         }
     }
+}
 
-    /// 文字列から変換する
-    #[allow(dead_code)]
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for LoanStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "active" => Some(LoanStatus::Active),
-            "overdue" => Some(LoanStatus::Overdue),
-            "returned" => Some(LoanStatus::Returned),
-            _ => None,
+            "active" => Ok(LoanStatus::Active),
+            "overdue" => Ok(LoanStatus::Overdue),
+            "returned" => Ok(LoanStatus::Returned),
+            _ => Err(format!("Invalid loan status: {}", s)),
         }
     }
 }
@@ -44,7 +45,7 @@ impl LoanStatus {
 ///
 /// クエリに最適化された非正規化ビュー（CQRSパターン）。
 /// イベント永続化時に非同期で更新される。
-#[allow(dead_code)]
+#[allow(dead_code)] // フィールドは将来のAPI層で使用
 #[derive(Debug, Clone)]
 pub struct LoanView {
     pub loan_id: LoanId,
@@ -63,25 +64,14 @@ pub struct LoanView {
 #[allow(dead_code)]
 #[async_trait]
 pub trait LoanReadModel: Send + Sync {
-    /// 新規貸出ビューレコードを挿入する
+    /// 貸出の現在状態をRead Modelに保存
     ///
-    /// BookLoanedイベント処理時に呼ばれる。
-    async fn insert(&self, loan_view: LoanView) -> Result<()>;
-
-    /// 貸出ステータスと返却日時を更新する
+    /// イベントストアから復元した集約の完全な状態を保存する。
+    /// 新規の場合はINSERT、既存の場合はUPDATE（upsert）を実行する。
     ///
-    /// BookReturnedまたはLoanBecameOverdueイベント処理時に呼ばれる。
-    async fn update_status(
-        &self,
-        loan_id: LoanId,
-        status: LoanStatus,
-        returned_at: Option<DateTime<Utc>>,
-    ) -> Result<()>;
-
-    /// 貸出返却期限を更新する
-    ///
-    /// LoanExtendedイベント処理時に呼ばれる。
-    async fn update_due_date(&self, loan_id: LoanId, new_due_date: DateTime<Utc>) -> Result<()>;
+    /// イベントソーシングの原則として、Read Modelは常にイベントから
+    /// 復元した集約の完全な状態を反映すべきであり、部分更新は行わない。
+    async fn save(&self, loan_view: LoanView) -> Result<()>;
 
     /// 会員の貸出中の貸出を取得する
     ///

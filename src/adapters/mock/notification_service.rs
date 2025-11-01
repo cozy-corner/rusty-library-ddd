@@ -3,10 +3,9 @@ use crate::ports::notification_service::{NotificationService as NotificationServ
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
-/// Mock implementation of NotificationService
+/// NotificationServiceのモック実装
 ///
-/// Does not send actual notifications.
-/// Simply succeeds without performing any action.
+/// 実際の通知は送信せず、常に成功を返す。
 #[allow(dead_code)]
 pub struct NotificationService;
 
@@ -25,7 +24,7 @@ impl Default for NotificationService {
 
 #[async_trait]
 impl NotificationServiceTrait for NotificationService {
-    /// Mock overdue notification (does nothing)
+    /// モックの延滞通知（何もしない）
     async fn send_overdue_notification(
         &self,
         _member_id: MemberId,
@@ -35,7 +34,7 @@ impl NotificationServiceTrait for NotificationService {
         Ok(())
     }
 
-    /// Mock extension confirmation (does nothing)
+    /// モックの延長確認通知（何もしない）
     async fn send_extension_confirmation(
         &self,
         _member_id: MemberId,
@@ -45,7 +44,7 @@ impl NotificationServiceTrait for NotificationService {
         Ok(())
     }
 
-    /// Mock return confirmation (does nothing)
+    /// モックの返却確認通知（何もしない）
     async fn send_return_confirmation(
         &self,
         _member_id: MemberId,
