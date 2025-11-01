@@ -6,7 +6,6 @@ use chrono::{DateTime, Utc};
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// 貸出ステータス（Read Model用）
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoanStatus {
     /// 貸出中
@@ -46,7 +45,7 @@ impl std::str::FromStr for LoanStatus {
 ///
 /// クエリに最適化された非正規化ビュー（CQRSパターン）。
 /// イベント永続化時に非同期で更新される。
-#[allow(dead_code)]
+#[allow(dead_code)] // フィールドは将来のAPI層で使用
 #[derive(Debug, Clone)]
 pub struct LoanView {
     pub loan_id: LoanId,
