@@ -158,31 +158,6 @@ impl TryFrom<u8> for ExtensionCount {
     }
 }
 
-/// 貸出状態
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LoanStatus {
-    /// 貸出中
-    Active,
-    /// 延滞中
-    Overdue,
-    /// 返却済み
-    Returned,
-}
-
-impl LoanStatus {
-    pub fn is_returned(&self) -> bool {
-        matches!(self, LoanStatus::Returned)
-    }
-
-    pub fn can_extend(&self) -> bool {
-        matches!(self, LoanStatus::Active)
-    }
-
-    pub fn is_overdue(&self) -> bool {
-        matches!(self, LoanStatus::Overdue)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,31 +196,6 @@ mod tests {
         let result = count.increment();
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), ExtensionError::LimitExceeded);
-    }
-
-    // TDD: LoanStatus のテスト
-    #[test]
-    fn test_loan_status_active_can_extend() {
-        let status = LoanStatus::Active;
-        assert!(status.can_extend());
-        assert!(!status.is_returned());
-        assert!(!status.is_overdue());
-    }
-
-    #[test]
-    fn test_loan_status_overdue_cannot_extend() {
-        let status = LoanStatus::Overdue;
-        assert!(!status.can_extend());
-        assert!(!status.is_returned());
-        assert!(status.is_overdue());
-    }
-
-    #[test]
-    fn test_loan_status_returned_cannot_extend() {
-        let status = LoanStatus::Returned;
-        assert!(!status.can_extend());
-        assert!(status.is_returned());
-        assert!(!status.is_overdue());
     }
 
     // ID value objects のテスト
