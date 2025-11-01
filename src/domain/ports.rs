@@ -9,36 +9,36 @@ use futures::stream::BoxStream;
 #[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// Event Store port for persisting and retrieving domain events.
+/// イベントストアポート
 ///
-/// This trait abstracts the persistence layer for event sourcing.
-/// Events are immutable facts stored in an append-only log.
+/// ドメインイベントの永続化と取得を抽象化する。
+/// イベントは追記専用ログに保存される不変の事実。
 #[allow(dead_code)]
 #[async_trait]
 pub trait EventStore: Send + Sync {
-    /// Append events for an aggregate.
+    /// 集約のイベントを追加する
     ///
-    /// Events are stored in an append-only log and cannot be modified or deleted.
-    /// The order of events is preserved.
+    /// イベントは追記専用ログに保存され、変更・削除不可。
+    /// イベントの順序は保持される。
     async fn append(&self, aggregate_id: LoanId, events: Vec<DomainEvent>) -> Result<()>;
 
-    /// Load all events for an aggregate.
+    /// 集約のすべてのイベントを読み込む
     ///
-    /// Returns events in the order they were appended.
-    /// Used to reconstruct aggregate state via replay_events.
+    /// 追加された順序でイベントを返す。
+    /// replay_events による集約状態の復元に使用される。
     async fn load(&self, aggregate_id: LoanId) -> Result<Vec<DomainEvent>>;
 
-    /// Stream all events across all aggregates.
+    /// すべての集約のイベントをストリーム配信する
     ///
-    /// Used for batch operations like overdue detection.
-    /// Events are streamed in insertion order.
+    /// 延滞検知などのバッチ操作に使用される。
+    /// イベントは挿入順にストリーム配信される。
     fn stream_all(&self) -> BoxStream<'static, Result<DomainEvent>>;
 }
 
-/// Read Model for efficient loan queries (CQRS pattern).
+/// 貸出ビュー（Read Model）
 ///
-/// This is a denormalized view optimized for queries.
-/// Updated asynchronously when events are persisted.
+/// クエリに最適化された非正規化ビュー（CQRSパターン）。
+/// イベント永続化時に非同期で更新される。
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct LoanView {
@@ -49,23 +49,24 @@ pub struct LoanView {
     pub due_date: DateTime<Utc>,
     pub returned_at: Option<DateTime<Utc>>,
     pub extension_count: u8,
-    /// Status: "active", "overdue", or "returned"
+    /// ステータス: "active", "overdue", "returned"
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
+/// 貸出Read Modelポート
 #[allow(dead_code)]
 #[async_trait]
 pub trait LoanReadModel: Send + Sync {
-    /// Insert a new loan view record.
+    /// 新規貸出ビューレコードを挿入する
     ///
-    /// Called when BookLoaned event is processed.
+    /// BookLoanedイベント処理時に呼ばれる。
     async fn insert(&self, loan_view: LoanView) -> Result<()>;
 
-    /// Update loan status and returned_at timestamp.
+    /// 貸出ステータスと返却日時を更新する
     ///
-    /// Called when BookReturned or LoanBecameOverdue events are processed.
+    /// BookReturnedまたはLoanBecameOverdueイベント処理時に呼ばれる。
     async fn update_status(
         &self,
         loan_id: LoanId,
@@ -73,77 +74,77 @@ pub trait LoanReadModel: Send + Sync {
         returned_at: Option<DateTime<Utc>>,
     ) -> Result<()>;
 
-    /// Update loan due date.
+    /// 貸出返却期限を更新する
     ///
-    /// Called when LoanExtended event is processed.
+    /// LoanExtendedイベント処理時に呼ばれる。
     async fn update_due_date(&self, loan_id: LoanId, new_due_date: DateTime<Utc>) -> Result<()>;
 
-    /// Get active loans for a member.
+    /// 会員の貸出中の貸出を取得する
     ///
-    /// Used to enforce loan limit (max 5 active loans per member).
+    /// 貸出上限（会員ごと最大5冊）の確認に使用される。
     async fn get_active_loans_for_member(&self, member_id: MemberId) -> Result<Vec<LoanView>>;
 
-    /// Find loans that might be overdue.
+    /// 延滞候補の貸出を検索する
     ///
-    /// Returns loans where due_date < cutoff_date and status is "active".
-    /// Used by batch job to detect overdue loans.
+    /// due_date < cutoff_date かつ status が "active" の貸出を返す。
+    /// バッチジョブでの延滞検知に使用される。
     async fn find_overdue_candidates(&self, cutoff_date: DateTime<Utc>) -> Result<Vec<LoanView>>;
 
-    /// Get a single loan by ID.
+    /// IDで貸出を取得する
     async fn get_by_id(&self, loan_id: LoanId) -> Result<Option<LoanView>>;
 
-    /// Find all loans for a member.
+    /// 会員の全貸出を検索する
     ///
-    /// Used for member loan history display.
+    /// 会員の貸出履歴表示に使用される。
     async fn find_by_member_id(&self, member_id: MemberId) -> Result<Vec<LoanView>>;
 }
 
-/// Member Service port for member context operations.
+/// 会員サービスポート
 ///
-/// This port maintains context boundaries between Loan and Member contexts.
-/// Loan context only knows MemberId, not member details.
+/// 貸出コンテキストと会員コンテキストの境界を維持する。
+/// 貸出コンテキストはMemberIDのみを知り、会員詳細は知らない。
 #[allow(dead_code)]
 #[async_trait]
 pub trait MemberService: Send + Sync {
-    /// Check if a member exists.
+    /// 会員が存在するか確認する
     ///
-    /// Used to validate member before creating a loan.
+    /// 貸出作成前の会員バリデーションに使用される。
     async fn exists(&self, member_id: MemberId) -> Result<bool>;
 
-    /// Check if a member has any overdue loans.
+    /// 会員が延滞中の貸出を持っているか確認する
     ///
-    /// Business rule: Cannot loan to member with overdue loans.
+    /// ビジネスルール: 延滞中の会員には貸出不可。
     async fn has_overdue_loans(&self, member_id: MemberId) -> Result<bool>;
 }
 
-/// Book Service port for catalog context operations.
+/// 書籍サービスポート
 ///
-/// This port maintains context boundaries between Loan and Catalog contexts.
-/// Loan context only knows BookId, not book details.
+/// 貸出コンテキストとカタログコンテキストの境界を維持する。
+/// 貸出コンテキストはBookIDのみを知り、書籍詳細は知らない。
 #[allow(dead_code)]
 #[async_trait]
 pub trait BookService: Send + Sync {
-    /// Check if a book is available for loan.
+    /// 書籍が貸出可能か確認する
     ///
-    /// Business rule: Cannot loan unavailable books.
+    /// ビジネスルール: 貸出不可の書籍は貸し出せない。
     async fn is_available_for_loan(&self, book_id: BookId) -> Result<bool>;
 
-    /// Get book title.
+    /// 書籍タイトルを取得する
     ///
-    /// Used in notifications to display friendly messages.
+    /// 通知メッセージでわかりやすい表示をするために使用される。
     async fn get_book_title(&self, book_id: BookId) -> Result<String>;
 }
 
-/// Notification Service port for sending notifications to members.
+/// 通知サービスポート
 ///
-/// This port abstracts notification delivery mechanism.
-/// Implementation could be email, SMS, push notification, etc.
+/// 会員への通知配信メカニズムを抽象化する。
+/// 実装はメール、SMS、プッシュ通知などが考えられる。
 #[allow(dead_code)]
 #[async_trait]
 pub trait NotificationService: Send + Sync {
-    /// Send overdue notification to member.
+    /// 延滞通知を会員に送信する
     ///
-    /// Called when LoanBecameOverdue event is processed.
+    /// LoanBecameOverdueイベント処理時に呼ばれる。
     async fn send_overdue_notification(
         &self,
         member_id: MemberId,
@@ -151,9 +152,9 @@ pub trait NotificationService: Send + Sync {
         due_date: DateTime<Utc>,
     ) -> Result<()>;
 
-    /// Send extension confirmation to member.
+    /// 延長確認通知を会員に送信する
     ///
-    /// Called when LoanExtended event is processed.
+    /// LoanExtendedイベント処理時に呼ばれる。
     async fn send_extension_confirmation(
         &self,
         member_id: MemberId,
@@ -161,9 +162,9 @@ pub trait NotificationService: Send + Sync {
         new_due_date: DateTime<Utc>,
     ) -> Result<()>;
 
-    /// Send return confirmation to member.
+    /// 返却確認通知を会員に送信する
     ///
-    /// Called when BookReturned event is processed.
+    /// BookReturnedイベント処理時に呼ばれる。
     async fn send_return_confirmation(
         &self,
         member_id: MemberId,
