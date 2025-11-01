@@ -27,15 +27,17 @@ impl LoanStatus {
             LoanStatus::Returned => "returned",
         }
     }
+}
 
-    /// 文字列から変換する
-    #[allow(dead_code, clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for LoanStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "active" => Some(LoanStatus::Active),
-            "overdue" => Some(LoanStatus::Overdue),
-            "returned" => Some(LoanStatus::Returned),
-            _ => None,
+            "active" => Ok(LoanStatus::Active),
+            "overdue" => Ok(LoanStatus::Overdue),
+            "returned" => Ok(LoanStatus::Returned),
+            _ => Err(format!("Invalid loan status: {}", s)),
         }
     }
 }
