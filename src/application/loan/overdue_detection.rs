@@ -1,6 +1,7 @@
 use crate::domain::{self, events::*};
 use crate::ports::*;
 
+use super::errors::{LoanApplicationError, Result};
 use super::loan_service::ServiceDependencies;
 
 /// 延滞検出バッチ（純粋な関数）
@@ -33,19 +34,25 @@ use super::loan_service::ServiceDependencies;
 /// # エラー
 /// ポート層のI/Oエラー（EventStore, LoanReadModel）
 #[allow(dead_code)]
-pub async fn detect_overdue_loans(
-    deps: &ServiceDependencies,
-) -> std::result::Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn detect_overdue_loans(deps: &ServiceDependencies) -> Result<usize> {
     let now = chrono::Utc::now();
     let mut detected_count = 0;
 
     // 1. Read Modelから延滞候補を取得
-    let candidates = deps.loan_read_model.find_overdue_candidates(now).await?;
+    let candidates = deps
+        .loan_read_model
+        .find_overdue_candidates(now)
+        .await
+        .map_err(LoanApplicationError::ReadModelError)?;
 
     // 2. 各候補について延滞判定
     for loan_view in candidates {
         // 2.1. イベントストアから完全な履歴を取得
-        let events = deps.event_store.load(loan_view.loan_id).await?;
+        let events = deps
+            .event_store
+            .load(loan_view.loan_id)
+            .await
+            .map_err(LoanApplicationError::EventStoreError)?;
 
         // 2.2. イベントから現在の状態を復元
         let loan = match domain::loan::replay_events(&events) {
@@ -73,12 +80,14 @@ pub async fn detect_overdue_loans(
                             active.loan_id,
                             vec![DomainEvent::LoanBecameOverdue(event.clone())],
                         )
-                        .await?;
+                        .await
+                        .map_err(LoanApplicationError::EventStoreError)?;
 
                     // Read Modelを更新
                     deps.loan_read_model
                         .update_status(active.loan_id, LoanStatus::Overdue, None)
-                        .await?;
+                        .await
+                        .map_err(LoanApplicationError::ReadModelError)?;
 
                     detected_count += 1;
                 }

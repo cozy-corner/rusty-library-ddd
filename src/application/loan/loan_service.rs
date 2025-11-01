@@ -4,6 +4,9 @@ use std::sync::Arc;
 
 use super::errors::{LoanApplicationError, Result};
 
+/// 会員1人あたりの最大貸出冊数
+const MAX_ACTIVE_LOANS: usize = 5;
+
 /// サービスの依存関係
 ///
 /// 関数型DDDの原則に従い、データ構造として定義。
@@ -23,6 +26,32 @@ pub struct ServiceDependencies {
     pub book_service: Arc<dyn BookService>,
 }
 
+/// イベントストアから貸出集約を復元するヘルパー関数
+///
+/// extend_loan, return_book, overdue_detectionで共通利用される。
+///
+/// # 引数
+/// * `event_store` - イベントストア
+/// * `loan_id` - 貸出ID
+///
+/// # 戻り値
+/// 復元された貸出集約
+///
+/// # エラー
+/// - EventStoreError: イベント読み込み失敗
+/// - LoanNotFound: イベントが存在しない、または復元に失敗
+async fn load_loan(
+    event_store: &Arc<dyn EventStore>,
+    loan_id: LoanId,
+) -> Result<domain::loan::Loan> {
+    let events = event_store
+        .load(loan_id)
+        .await
+        .map_err(LoanApplicationError::EventStoreError)?;
+
+    domain::loan::replay_events(&events).ok_or(LoanApplicationError::LoanNotFound)
+}
+
 /// 書籍を貸し出す（純粋な関数）
 ///
 /// ビジネスルール：
@@ -32,6 +61,19 @@ pub struct ServiceDependencies {
 /// - 会員の貸出中の冊数が5冊未満であること
 ///
 /// すべての依存が引数として明示的に渡される（関数型の原則）。
+///
+/// # 一貫性保証
+///
+/// この関数は**結果整合性（Eventual Consistency）**を提供します。
+///
+/// - EventStore（書き込み）とReadModel（読み取り）は独立して更新されます
+/// - ReadModel更新がEventStore保存後に失敗した場合、一時的に不整合が発生します
+/// - 将来の拡張（Phase 5以降）でイベントプロジェクションワーカーによる自動修復を予定
+///
+/// # 冪等性
+///
+/// **警告**: この関数は冪等ではありません。重複した呼び出しは重複イベントを生成します。
+/// 将来の拡張で冪等キーによる重複検出を予定しています。
 ///
 /// # 引数
 /// * `deps` - サービスの依存関係
@@ -46,7 +88,7 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
         .member_service
         .exists(cmd.member_id)
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::MemberServiceError)?;
 
     if !member_exists {
         return Err(LoanApplicationError::MemberNotFound);
@@ -57,7 +99,7 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
         .book_service
         .is_available_for_loan(cmd.book_id)
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::BookServiceError)?;
 
     if !book_available {
         return Err(LoanApplicationError::BookNotAvailable);
@@ -68,7 +110,7 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
         .member_service
         .has_overdue_loans(cmd.member_id)
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::MemberServiceError)?;
 
     if has_overdue {
         return Err(LoanApplicationError::MemberHasOverdueLoan);
@@ -79,9 +121,9 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
         .loan_read_model
         .get_active_loans_for_member(cmd.member_id)
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::ReadModelError)?;
 
-    if active_loans.len() >= 5 {
+    if active_loans.len() >= MAX_ACTIVE_LOANS {
         return Err(LoanApplicationError::LoanLimitExceeded);
     }
 
@@ -96,7 +138,7 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
     deps.event_store
         .append(loan_id, vec![DomainEvent::BookLoaned(event.clone())])
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::EventStoreError)?;
 
     // 7. Read Modelを更新
     let loan_view = LoanView {
@@ -115,7 +157,7 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
     deps.loan_read_model
         .insert(loan_view)
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::ReadModelError)?;
 
     Ok(loan_id)
 }
@@ -129,22 +171,19 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
 ///
 /// すべての依存が引数として明示的に渡される（関数型の原則）。
 ///
+/// # 一貫性保証
+///
+/// 結果整合性を提供。詳細は`loan_book()`を参照。
+///
 /// # 引数
 /// * `deps` - サービスの依存関係
 /// * `cmd` - 延長コマンド
 #[allow(dead_code)]
 pub async fn extend_loan(deps: &ServiceDependencies, cmd: ExtendLoan) -> Result<()> {
-    // 1. イベントストアからイベント列を取得
-    let events = deps
-        .event_store
-        .load(cmd.loan_id)
-        .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+    // 1. イベントストアから貸出集約を復元
+    let loan = load_loan(&deps.event_store, cmd.loan_id).await?;
 
-    // 2. イベントから現在の状態を復元
-    let loan = domain::loan::replay_events(&events).ok_or(LoanApplicationError::LoanNotFound)?;
-
-    // 3. ActiveLoanであることを確認
+    // 2. ActiveLoanであることを確認
     let active_loan = match loan {
         domain::loan::Loan::Active(active) => active,
         domain::loan::Loan::Overdue(_) => {
@@ -159,21 +198,21 @@ pub async fn extend_loan(deps: &ServiceDependencies, cmd: ExtendLoan) -> Result<
         }
     };
 
-    // 4. ドメイン層の純粋関数を呼び出し
+    // 3. ドメイン層の純粋関数を呼び出し
     let (_, event) = domain::loan::extend_loan(active_loan, cmd.extended_at)
         .map_err(|e| LoanApplicationError::DomainError(format!("{:?}", e)))?;
 
-    // 5. イベントストアに保存
+    // 4. イベントストアに保存
     deps.event_store
         .append(cmd.loan_id, vec![DomainEvent::LoanExtended(event.clone())])
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::EventStoreError)?;
 
-    // 6. Read Modelを更新
+    // 5. Read Modelを更新
     deps.loan_read_model
         .update_due_date(cmd.loan_id, event.new_due_date)
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::ReadModelError)?;
 
     Ok(())
 }
@@ -187,36 +226,33 @@ pub async fn extend_loan(deps: &ServiceDependencies, cmd: ExtendLoan) -> Result<
 ///
 /// すべての依存が引数として明示的に渡される（関数型の原則）。
 ///
+/// # 一貫性保証
+///
+/// 結果整合性を提供。詳細は`loan_book()`を参照。
+///
 /// # 引数
 /// * `deps` - サービスの依存関係
 /// * `cmd` - 返却コマンド
 #[allow(dead_code)]
 pub async fn return_book(deps: &ServiceDependencies, cmd: ReturnBook) -> Result<()> {
-    // 1. イベントストアからイベント列を取得
-    let events = deps
-        .event_store
-        .load(cmd.loan_id)
-        .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+    // 1. イベントストアから貸出集約を復元
+    let loan = load_loan(&deps.event_store, cmd.loan_id).await?;
 
-    // 2. イベントから現在の状態を復元
-    let loan = domain::loan::replay_events(&events).ok_or(LoanApplicationError::LoanNotFound)?;
-
-    // 3. ドメイン層の純粋関数を呼び出し
+    // 2. ドメイン層の純粋関数を呼び出し
     let (_, event) = domain::loan::return_book(loan, cmd.returned_at)
         .map_err(|e| LoanApplicationError::DomainError(format!("{:?}", e)))?;
 
-    // 4. イベントストアに保存
+    // 3. イベントストアに保存
     deps.event_store
         .append(cmd.loan_id, vec![DomainEvent::BookReturned(event.clone())])
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::EventStoreError)?;
 
-    // 5. Read Modelを更新
+    // 4. Read Modelを更新
     deps.loan_read_model
         .update_status(cmd.loan_id, LoanStatus::Returned, Some(event.returned_at))
         .await
-        .map_err(|e| LoanApplicationError::PortError(e.to_string()))?;
+        .map_err(LoanApplicationError::ReadModelError)?;
 
     Ok(())
 }
