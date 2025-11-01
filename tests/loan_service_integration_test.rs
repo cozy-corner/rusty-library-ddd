@@ -1,4 +1,5 @@
 use chrono::Utc;
+use rusty_library_ddd::adapters::mock::{BookService, MemberService};
 use rusty_library_ddd::application::loan::{
     ServiceDependencies, detect_overdue_loans, extend_loan, loan_book, return_book,
 };
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 // ============================================================================
-// インメモリモック実装（テスト用）
+// インメモリモック実装（EventStore, LoanReadModelのみ）
 // ============================================================================
 
 /// インメモリEventStore実装
@@ -137,75 +138,18 @@ impl LoanReadModel for InMemoryLoanReadModel {
     }
 }
 
-/// モックMemberService実装
-struct MockMemberService {
-    existing_members: Mutex<Vec<MemberId>>,
-    overdue_members: Mutex<Vec<MemberId>>,
-}
-
-impl MockMemberService {
-    fn new() -> Self {
-        Self {
-            existing_members: Mutex::new(Vec::new()),
-            overdue_members: Mutex::new(Vec::new()),
-        }
-    }
-
-    fn add_member(&self, member_id: MemberId) {
-        self.existing_members.lock().unwrap().push(member_id);
-    }
-}
-
-#[async_trait::async_trait]
-impl MemberService for MockMemberService {
-    async fn exists(&self, member_id: MemberId) -> member_service::Result<bool> {
-        Ok(self.existing_members.lock().unwrap().contains(&member_id))
-    }
-
-    async fn has_overdue_loans(&self, member_id: MemberId) -> member_service::Result<bool> {
-        Ok(self.overdue_members.lock().unwrap().contains(&member_id))
-    }
-}
-
-/// モックBookService実装
-struct MockBookService {
-    available_books: Mutex<Vec<BookId>>,
-}
-
-impl MockBookService {
-    fn new() -> Self {
-        Self {
-            available_books: Mutex::new(Vec::new()),
-        }
-    }
-
-    fn add_available_book(&self, book_id: BookId) {
-        self.available_books.lock().unwrap().push(book_id);
-    }
-}
-
-#[async_trait::async_trait]
-impl BookService for MockBookService {
-    async fn is_available_for_loan(&self, book_id: BookId) -> book_service::Result<bool> {
-        Ok(self.available_books.lock().unwrap().contains(&book_id))
-    }
-
-    async fn get_book_title(&self, _book_id: BookId) -> book_service::Result<String> {
-        Ok("Test Book".to_string())
-    }
-}
-
 // ============================================================================
 // 統合テスト（関数型DDD - 関数ベースのAPI）
+// Task 3のモックアダプター（MemberService, BookService）を使用
 // ============================================================================
 
 #[tokio::test]
 async fn test_loan_book_success() {
-    // Arrange: 依存関係のセットアップ
+    // Arrange: 依存関係のセットアップ（Task 3のモックアダプターを使用）
     let event_store = Arc::new(InMemoryEventStore::new());
     let loan_read_model = Arc::new(InMemoryLoanReadModel::new());
-    let member_service = Arc::new(MockMemberService::new());
-    let book_service = Arc::new(MockBookService::new());
+    let member_service = Arc::new(MemberService::new());
+    let book_service = Arc::new(BookService::new());
 
     let member_id = MemberId::new();
     let book_id = BookId::new();
@@ -251,8 +195,8 @@ async fn test_loan_book_member_not_found() {
     // Arrange
     let event_store = Arc::new(InMemoryEventStore::new());
     let loan_read_model = Arc::new(InMemoryLoanReadModel::new());
-    let member_service = Arc::new(MockMemberService::new());
-    let book_service = Arc::new(MockBookService::new());
+    let member_service = Arc::new(MemberService::new());
+    let book_service = Arc::new(BookService::new());
 
     let member_id = MemberId::new();
     let book_id = BookId::new();
@@ -291,8 +235,8 @@ async fn test_loan_book_limit_exceeded() {
     // Arrange: 既に5冊借りている会員
     let event_store = Arc::new(InMemoryEventStore::new());
     let loan_read_model = Arc::new(InMemoryLoanReadModel::new());
-    let member_service = Arc::new(MockMemberService::new());
-    let book_service = Arc::new(MockBookService::new());
+    let member_service = Arc::new(MemberService::new());
+    let book_service = Arc::new(BookService::new());
 
     let member_id = MemberId::new();
     let staff_id = StaffId::new();
@@ -353,8 +297,8 @@ async fn test_extend_loan_success() {
     // Arrange: 貸出を事前に作成
     let event_store = Arc::new(InMemoryEventStore::new());
     let loan_read_model = Arc::new(InMemoryLoanReadModel::new());
-    let member_service = Arc::new(MockMemberService::new());
-    let book_service = Arc::new(MockBookService::new());
+    let member_service = Arc::new(MemberService::new());
+    let book_service = Arc::new(BookService::new());
 
     let member_id = MemberId::new();
     let book_id = BookId::new();
@@ -401,8 +345,8 @@ async fn test_return_book_success() {
     // Arrange: 貸出を事前に作成
     let event_store = Arc::new(InMemoryEventStore::new());
     let loan_read_model = Arc::new(InMemoryLoanReadModel::new());
-    let member_service = Arc::new(MockMemberService::new());
-    let book_service = Arc::new(MockBookService::new());
+    let member_service = Arc::new(MemberService::new());
+    let book_service = Arc::new(BookService::new());
 
     let member_id = MemberId::new();
     let book_id = BookId::new();
@@ -454,8 +398,8 @@ async fn test_detect_overdue_loans() {
     // Arrange: 延滞した貸出を作成
     let event_store = Arc::new(InMemoryEventStore::new());
     let loan_read_model = Arc::new(InMemoryLoanReadModel::new());
-    let member_service = Arc::new(MockMemberService::new());
-    let book_service = Arc::new(MockBookService::new());
+    let member_service = Arc::new(MemberService::new());
+    let book_service = Arc::new(BookService::new());
 
     let member_id = MemberId::new();
     let book_id = BookId::new();
