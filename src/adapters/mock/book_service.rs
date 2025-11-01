@@ -4,10 +4,10 @@ use async_trait::async_trait;
 use std::collections::HashSet;
 use std::sync::Mutex;
 
-/// Mock implementation of BookService
+/// BookServiceのモック実装
 ///
-/// Supports stateful testing by storing book IDs.
-/// Can register books as available for loan.
+/// 書籍IDを保存することで状態を持ったテストをサポート。
+/// 貸出可能な書籍を登録可能。
 #[allow(dead_code)]
 pub struct BookService {
     available_books: Mutex<HashSet<BookId>>,
@@ -21,7 +21,7 @@ impl BookService {
         }
     }
 
-    /// Add a book as available for loan for testing purposes
+    /// テスト用に貸出可能な書籍を登録
     pub fn add_available_book(&self, book_id: BookId) {
         self.available_books.lock().unwrap().insert(book_id);
     }
@@ -35,12 +35,12 @@ impl Default for BookService {
 
 #[async_trait]
 impl BookServiceTrait for BookService {
-    /// Check if book is available in the registered books
+    /// 登録された書籍の中で貸出可能かチェック
     async fn is_available_for_loan(&self, book_id: BookId) -> Result<bool> {
         Ok(self.available_books.lock().unwrap().contains(&book_id))
     }
 
-    /// Returns a fixed book title
+    /// 固定の書籍タイトルを返す
     async fn get_book_title(&self, _book_id: BookId) -> Result<String> {
         Ok("Mock Book Title".to_string())
     }
