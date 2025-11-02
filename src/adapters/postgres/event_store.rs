@@ -45,8 +45,9 @@ impl EventStore {
 impl EventStoreTrait for EventStore {
     /// Append events to the event store
     ///
-    /// Events are stored in insertion order with an auto-incrementing sequence number.
+    /// Events are stored with versioning for optimistic concurrency control.
     /// All events for a single aggregate are stored atomically within a transaction.
+    /// The aggregate_version is automatically incremented for each event.
     async fn append(&self, aggregate_id: LoanId, events: Vec<DomainEvent>) -> Result<()> {
         if events.is_empty() {
             return Ok(());
@@ -54,18 +55,42 @@ impl EventStoreTrait for EventStore {
 
         let mut tx = self.pool.begin().await?;
 
+        // Get the current version of the aggregate
+        // COALESCE handles NULL when no events exist for this aggregate
+        let current_version: i32 = sqlx::query_scalar(
+            r#"
+            SELECT COALESCE(MAX(aggregate_version), 0)
+            FROM events
+            WHERE aggregate_id = $1
+            "#,
+        )
+        .bind(aggregate_id.value())
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let mut version = current_version;
+
         for event in events {
+            version += 1;
             let event_type = Self::event_type(&event);
             let occurred_at = Self::occurred_at(&event);
             let event_data = serde_json::to_value(&event)?;
 
             sqlx::query(
                 r#"
-                INSERT INTO events (aggregate_id, aggregate_type, event_type, event_data, occurred_at)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO events (
+                    aggregate_id,
+                    aggregate_version,
+                    aggregate_type,
+                    event_type,
+                    event_data,
+                    occurred_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
                 "#,
             )
             .bind(aggregate_id.value())
+            .bind(version)
             .bind("Loan")
             .bind(event_type)
             .bind(event_data)
@@ -80,7 +105,7 @@ impl EventStoreTrait for EventStore {
 
     /// Load all events for an aggregate in chronological order
     ///
-    /// Events are returned in the order they were appended (by sequence_number).
+    /// Events are returned in the order they were appended (by aggregate_version).
     /// Used to reconstruct aggregate state through event replay.
     async fn load(&self, aggregate_id: LoanId) -> Result<Vec<DomainEvent>> {
         let rows = sqlx::query(
@@ -88,7 +113,7 @@ impl EventStoreTrait for EventStore {
             SELECT event_data
             FROM events
             WHERE aggregate_id = $1
-            ORDER BY sequence_number ASC
+            ORDER BY aggregate_version ASC
             "#,
         )
         .bind(aggregate_id.value())
