@@ -12,8 +12,8 @@ CREATE TABLE events (
     UNIQUE (aggregate_id, aggregate_version)
 );
 
--- Index for loading events by aggregate ID in version order
-CREATE INDEX idx_events_aggregate_id ON events(aggregate_id, aggregate_version);
+-- Note: UNIQUE constraint on (aggregate_id, aggregate_version) automatically creates an index
+-- which is used for loading events by aggregate ID
 
 -- Index for global stream ordering
 CREATE INDEX idx_events_sequence_number ON events(sequence_number);
@@ -23,6 +23,3 @@ CREATE INDEX idx_events_event_type ON events(event_type);
 
 -- Index for temporal queries
 CREATE INDEX idx_events_occurred_at ON events(occurred_at);
-
--- Index for aggregate type queries
-CREATE INDEX idx_events_aggregate_type ON events(aggregate_type);
