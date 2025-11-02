@@ -1,8 +1,9 @@
-use crate::domain::{events::DomainEvent, value_objects::LoanId};
+use crate::domain::events::DomainEvent;
 use crate::ports::event_store::{EventStore as EventStoreTrait, Result};
 use async_trait::async_trait;
 use futures::stream::{BoxStream, StreamExt};
 use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 /// PostgreSQL implementation of EventStore
 ///
@@ -49,7 +50,12 @@ impl EventStoreTrait for EventStore {
     /// All events for a single aggregate are stored atomically within a transaction.
     /// The aggregate_version is automatically incremented for each event.
     /// Uses batch INSERT with UNNEST for optimal performance.
-    async fn append(&self, aggregate_id: LoanId, events: Vec<DomainEvent>) -> Result<()> {
+    async fn append(
+        &self,
+        aggregate_id: Uuid,
+        aggregate_type: &str,
+        events: Vec<DomainEvent>,
+    ) -> Result<()> {
         if events.is_empty() {
             return Ok(());
         }
@@ -65,7 +71,7 @@ impl EventStoreTrait for EventStore {
             WHERE aggregate_id = $1
             "#,
         )
-        .bind(aggregate_id.value())
+        .bind(aggregate_id)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -84,7 +90,7 @@ impl EventStoreTrait for EventStore {
 
         // Batch INSERT using UNNEST
         // aggregate_type is constant for all events in this batch
-        let aggregate_types = vec!["Loan"; events.len()];
+        let aggregate_types = vec![aggregate_type; events.len()];
 
         sqlx::query(
             r#"
@@ -99,7 +105,7 @@ impl EventStoreTrait for EventStore {
             SELECT $1, * FROM UNNEST($2::int[], $3::varchar[], $4::varchar[], $5::jsonb[], $6::timestamptz[])
             "#,
         )
-        .bind(aggregate_id.value())
+        .bind(aggregate_id)
         .bind(&versions)
         .bind(&aggregate_types)
         .bind(&event_types)
@@ -116,7 +122,7 @@ impl EventStoreTrait for EventStore {
     ///
     /// Events are returned in the order they were appended (by aggregate_version).
     /// Used to reconstruct aggregate state through event replay.
-    async fn load(&self, aggregate_id: LoanId) -> Result<Vec<DomainEvent>> {
+    async fn load(&self, aggregate_id: Uuid) -> Result<Vec<DomainEvent>> {
         let rows = sqlx::query(
             r#"
             SELECT event_data
@@ -125,7 +131,7 @@ impl EventStoreTrait for EventStore {
             ORDER BY aggregate_version ASC
             "#,
         )
-        .bind(aggregate_id.value())
+        .bind(aggregate_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -170,7 +176,7 @@ mod tests {
     use super::*;
     use crate::domain::{
         events::{BookLoaned, BookReturned, LoanExtended},
-        value_objects::{BookId, MemberId, StaffId},
+        value_objects::{BookId, LoanId, MemberId, StaffId},
     };
     use chrono::Utc;
 
@@ -225,13 +231,13 @@ mod tests {
 
         // Append events
         event_store
-            .append(loan_id, events.clone())
+            .append(loan_id.value(), "Loan", events.clone())
             .await
             .expect("Failed to append events");
 
         // Load events
         let loaded_events = event_store
-            .load(loan_id)
+            .load(loan_id.value())
             .await
             .expect("Failed to load events");
 
@@ -249,7 +255,7 @@ mod tests {
 
         let loan_id = LoanId::new();
         let events = event_store
-            .load(loan_id)
+            .load(loan_id.value())
             .await
             .expect("Failed to load events");
 
@@ -262,7 +268,7 @@ mod tests {
         let event_store = EventStore::new(pool);
 
         let loan_id = LoanId::new();
-        let result = event_store.append(loan_id, vec![]).await;
+        let result = event_store.append(loan_id.value(), "Loan", vec![]).await;
 
         assert!(result.is_ok());
     }
@@ -296,7 +302,7 @@ mod tests {
         ];
 
         event_store
-            .append(loan_id, events.clone())
+            .append(loan_id.value(), "Loan", events.clone())
             .await
             .expect("Failed to append events");
 
@@ -345,7 +351,7 @@ mod tests {
         });
 
         event_store
-            .append(loan_id, vec![event1.clone()])
+            .append(loan_id.value(), "Loan", vec![event1.clone()])
             .await
             .expect("Failed to append first event");
 
@@ -358,13 +364,13 @@ mod tests {
         });
 
         event_store
-            .append(loan_id, vec![event2.clone()])
+            .append(loan_id.value(), "Loan", vec![event2.clone()])
             .await
             .expect("Failed to append second event");
 
         // Load events and verify ordering
         let loaded_events = event_store
-            .load(loan_id)
+            .load(loan_id.value())
             .await
             .expect("Failed to load events");
 
