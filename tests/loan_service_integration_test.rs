@@ -9,6 +9,7 @@ use rusty_library_ddd::domain::value_objects::*;
 use rusty_library_ddd::ports::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 // ============================================================================
 // インメモリモック実装（EventStore, LoanReadModelのみ）
@@ -16,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 /// インメモリEventStore実装
 struct InMemoryEventStore {
-    events: Mutex<HashMap<LoanId, Vec<DomainEvent>>>,
+    events: Mutex<HashMap<Uuid, Vec<DomainEvent>>>,
 }
 
 impl InMemoryEventStore {
@@ -31,7 +32,8 @@ impl InMemoryEventStore {
 impl EventStore for InMemoryEventStore {
     async fn append(
         &self,
-        aggregate_id: LoanId,
+        aggregate_id: Uuid,
+        _aggregate_type: &str,
         events: Vec<DomainEvent>,
     ) -> event_store::Result<()> {
         let mut store = self.events.lock().unwrap();
@@ -39,7 +41,7 @@ impl EventStore for InMemoryEventStore {
         Ok(())
     }
 
-    async fn load(&self, aggregate_id: LoanId) -> event_store::Result<Vec<DomainEvent>> {
+    async fn load(&self, aggregate_id: Uuid) -> event_store::Result<Vec<DomainEvent>> {
         let store = self.events.lock().unwrap();
         Ok(store.get(&aggregate_id).cloned().unwrap_or_default())
     }
@@ -154,7 +156,7 @@ async fn test_loan_book_success() {
     let loan_id = result.unwrap();
 
     // イベントが保存されたことを確認
-    let events = event_store.load(loan_id).await.unwrap();
+    let events = event_store.load(loan_id.value()).await.unwrap();
     assert_eq!(events.len(), 1);
     assert!(matches!(events[0], DomainEvent::BookLoaned(_)));
 
@@ -309,7 +311,7 @@ async fn test_extend_loan_success() {
     assert!(result.is_ok());
 
     // イベントが追加されたことを確認
-    let events = event_store.load(loan_id).await.unwrap();
+    let events = event_store.load(loan_id.value()).await.unwrap();
     assert_eq!(events.len(), 2); // BookLoaned + LoanExtended
     assert!(matches!(events[1], DomainEvent::LoanExtended(_)));
 }
@@ -357,7 +359,7 @@ async fn test_return_book_success() {
     assert!(result.is_ok());
 
     // イベントが追加されたことを確認
-    let events = event_store.load(loan_id).await.unwrap();
+    let events = event_store.load(loan_id.value()).await.unwrap();
     assert_eq!(events.len(), 2); // BookLoaned + BookReturned
     assert!(matches!(events[1], DomainEvent::BookReturned(_)));
 
@@ -407,7 +409,7 @@ async fn test_detect_overdue_loans() {
     assert_eq!(result.unwrap(), 1);
 
     // LoanBecameOverdueイベントが追加されたことを確認
-    let events = event_store.load(loan_id).await.unwrap();
+    let events = event_store.load(loan_id.value()).await.unwrap();
     assert_eq!(events.len(), 2); // BookLoaned + LoanBecameOverdue
     assert!(matches!(events[1], DomainEvent::LoanBecameOverdue(_)));
 

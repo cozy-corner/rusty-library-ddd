@@ -3,6 +3,18 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Trait for aggregate identifiers in event sourcing
+///
+/// All aggregate IDs must provide their UUID value and aggregate type name
+/// for event store persistence.
+pub trait AggregateId: Send + Sync {
+    /// Returns the UUID value of this aggregate ID
+    fn value(&self) -> Uuid;
+
+    /// Returns the aggregate type name (e.g., "Loan", "Reservation")
+    fn aggregate_type(&self) -> &'static str;
+}
+
 /// 貸出ID - 貸出管理コンテキストの集約ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct LoanId(Uuid);
@@ -24,6 +36,16 @@ impl LoanId {
 impl Default for LoanId {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl AggregateId for LoanId {
+    fn value(&self) -> Uuid {
+        self.0
+    }
+
+    fn aggregate_type(&self) -> &'static str {
+        "Loan"
     }
 }
 
