@@ -48,6 +48,7 @@ impl EventStoreTrait for EventStore {
     /// Events are stored with versioning for optimistic concurrency control.
     /// All events for a single aggregate are stored atomically within a transaction.
     /// The aggregate_version is automatically incremented for each event.
+    /// Uses batch INSERT with UNNEST for optimal performance.
     async fn append(&self, aggregate_id: LoanId, events: Vec<DomainEvent>) -> Result<()> {
         if events.is_empty() {
             return Ok(());
@@ -68,36 +69,44 @@ impl EventStoreTrait for EventStore {
         .fetch_one(&mut *tx)
         .await?;
 
-        let mut version = current_version;
+        // Prepare batch data
+        let mut versions = Vec::with_capacity(events.len());
+        let mut event_types = Vec::with_capacity(events.len());
+        let mut event_data_list = Vec::with_capacity(events.len());
+        let mut occurred_at_list = Vec::with_capacity(events.len());
 
-        for event in events {
-            version += 1;
-            let event_type = Self::event_type(&event);
-            let occurred_at = Self::occurred_at(&event);
-            let event_data = serde_json::to_value(&event)?;
-
-            sqlx::query(
-                r#"
-                INSERT INTO events (
-                    aggregate_id,
-                    aggregate_version,
-                    aggregate_type,
-                    event_type,
-                    event_data,
-                    occurred_at
-                )
-                VALUES ($1, $2, $3, $4, $5, $6)
-                "#,
-            )
-            .bind(aggregate_id.value())
-            .bind(version)
-            .bind("Loan")
-            .bind(event_type)
-            .bind(event_data)
-            .bind(occurred_at)
-            .execute(&mut *tx)
-            .await?;
+        for (i, event) in events.iter().enumerate() {
+            versions.push(current_version + (i as i32) + 1);
+            event_types.push(Self::event_type(event));
+            event_data_list.push(serde_json::to_value(event)?);
+            occurred_at_list.push(Self::occurred_at(event));
         }
+
+        // Batch INSERT using UNNEST
+        // aggregate_type is constant for all events in this batch
+        let aggregate_types = vec!["Loan"; events.len()];
+
+        sqlx::query(
+            r#"
+            INSERT INTO events (
+                aggregate_id,
+                aggregate_version,
+                aggregate_type,
+                event_type,
+                event_data,
+                occurred_at
+            )
+            SELECT $1, * FROM UNNEST($2::int[], $3::varchar[], $4::varchar[], $5::jsonb[], $6::timestamptz[])
+            "#,
+        )
+        .bind(aggregate_id.value())
+        .bind(&versions)
+        .bind(&aggregate_types)
+        .bind(&event_types)
+        .bind(&event_data_list)
+        .bind(&occurred_at_list)
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(())
