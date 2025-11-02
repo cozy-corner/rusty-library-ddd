@@ -49,7 +49,7 @@ pub async fn detect_overdue_loans(deps: &ServiceDependencies) -> Result<usize> {
         // 2.1. イベントストアから完全な履歴を取得
         let events = deps
             .event_store
-            .load(loan_view.loan_id)
+            .load(loan_view.loan_id.value())
             .await
             .map_err(LoanApplicationError::EventStoreError)?;
 
@@ -76,7 +76,8 @@ pub async fn detect_overdue_loans(deps: &ServiceDependencies) -> Result<usize> {
                     // イベントストアに保存
                     deps.event_store
                         .append(
-                            active.loan_id,
+                            active.loan_id.value(),
+                            "Loan",
                             vec![DomainEvent::LoanBecameOverdue(event.clone())],
                         )
                         .await
