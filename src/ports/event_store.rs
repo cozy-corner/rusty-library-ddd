@@ -1,6 +1,7 @@
-use crate::domain::{events::DomainEvent, value_objects::LoanId};
+use crate::domain::events::DomainEvent;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use uuid::Uuid;
 
 #[allow(dead_code)]
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -16,13 +17,18 @@ pub trait EventStore: Send + Sync {
     ///
     /// イベントは追記専用ログに保存され、変更・削除不可。
     /// イベントの順序は保持される。
-    async fn append(&self, aggregate_id: LoanId, events: Vec<DomainEvent>) -> Result<()>;
+    async fn append(
+        &self,
+        aggregate_id: Uuid,
+        aggregate_type: &str,
+        events: Vec<DomainEvent>,
+    ) -> Result<()>;
 
     /// 集約のすべてのイベントを読み込む
     ///
     /// 追加された順序でイベントを返す。
     /// replay_events による集約状態の復元に使用される。
-    async fn load(&self, aggregate_id: LoanId) -> Result<Vec<DomainEvent>>;
+    async fn load(&self, aggregate_id: Uuid) -> Result<Vec<DomainEvent>>;
 
     /// すべての集約のイベントをストリーム配信する
     ///

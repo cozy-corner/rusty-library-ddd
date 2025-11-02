@@ -45,7 +45,7 @@ async fn load_loan(
     loan_id: LoanId,
 ) -> Result<domain::loan::Loan> {
     let events = event_store
-        .load(loan_id)
+        .load(loan_id.value())
         .await
         .map_err(LoanApplicationError::EventStoreError)?;
 
@@ -187,7 +187,11 @@ pub async fn loan_book(deps: &ServiceDependencies, cmd: LoanBook) -> Result<Loan
 
     // 6. イベントストアに保存
     deps.event_store
-        .append(loan_id, vec![DomainEvent::BookLoaned(event.clone())])
+        .append(
+            loan_id.value(),
+            "Loan",
+            vec![DomainEvent::BookLoaned(event.clone())],
+        )
         .await
         .map_err(LoanApplicationError::EventStoreError)?;
 
@@ -243,7 +247,11 @@ pub async fn extend_loan(deps: &ServiceDependencies, cmd: ExtendLoan) -> Result<
 
     // 4. イベントストアに保存
     deps.event_store
-        .append(cmd.loan_id, vec![DomainEvent::LoanExtended(event.clone())])
+        .append(
+            cmd.loan_id.value(),
+            "Loan",
+            vec![DomainEvent::LoanExtended(event.clone())],
+        )
         .await
         .map_err(LoanApplicationError::EventStoreError)?;
 
@@ -284,7 +292,11 @@ pub async fn return_book(deps: &ServiceDependencies, cmd: ReturnBook) -> Result<
 
     // 3. イベントストアに保存
     deps.event_store
-        .append(cmd.loan_id, vec![DomainEvent::BookReturned(event.clone())])
+        .append(
+            cmd.loan_id.value(),
+            "Loan",
+            vec![DomainEvent::BookReturned(event.clone())],
+        )
         .await
         .map_err(LoanApplicationError::EventStoreError)?;
 
