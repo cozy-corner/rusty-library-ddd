@@ -4,8 +4,42 @@ use crate::ports::loan_read_model::{
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Row, postgres::PgRow};
 use std::str::FromStr;
+
+/// PostgreSQLの行データをLoanViewに変換する
+///
+/// データベースから取得した行を、ドメインの値オブジェクトとLoanViewに変換する。
+/// extension_countのi16からu8への変換とLoanStatusの文字列からの変換で
+/// エラーハンドリングを行う。
+fn map_row_to_loan_view(row: &PgRow) -> Result<LoanView> {
+    let extension_count_i16: i16 = row.get("extension_count");
+    let extension_count: u8 = extension_count_i16.try_into().map_err(|_| {
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("extension_count out of range: {}", extension_count_i16),
+        )) as Box<dyn std::error::Error + Send + Sync>
+    })?;
+
+    let status_str: &str = row.get("status");
+    let status = LoanStatus::from_str(status_str).map_err(|e| {
+        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+            as Box<dyn std::error::Error + Send + Sync>
+    })?;
+
+    Ok(LoanView {
+        loan_id: LoanId::from_uuid(row.get("loan_id")),
+        book_id: BookId::from_uuid(row.get("book_id")),
+        member_id: MemberId::from_uuid(row.get("member_id")),
+        loaned_at: row.get("loaned_at"),
+        due_date: row.get("due_date"),
+        returned_at: row.get("returned_at"),
+        extension_count,
+        status,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
 
 /// LoanReadModelのPostgreSQL実装
 ///
@@ -101,25 +135,7 @@ impl LoanReadModelTrait for LoanReadModel {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.iter()
-            .map(|row| {
-                Ok(LoanView {
-                    loan_id: LoanId::from_uuid(row.get("loan_id")),
-                    book_id: BookId::from_uuid(row.get("book_id")),
-                    member_id: MemberId::from_uuid(row.get("member_id")),
-                    loaned_at: row.get("loaned_at"),
-                    due_date: row.get("due_date"),
-                    returned_at: row.get("returned_at"),
-                    extension_count: row.get::<i16, _>("extension_count") as u8,
-                    status: LoanStatus::from_str(row.get("status")).map_err(|e| {
-                        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-                            as Box<dyn std::error::Error + Send + Sync>
-                    })?,
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                })
-            })
-            .collect()
+        rows.iter().map(map_row_to_loan_view).collect()
     }
 
     /// 延滞候補を検索（バッチ延滞検知用）
@@ -149,25 +165,7 @@ impl LoanReadModelTrait for LoanReadModel {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.iter()
-            .map(|row| {
-                Ok(LoanView {
-                    loan_id: LoanId::from_uuid(row.get("loan_id")),
-                    book_id: BookId::from_uuid(row.get("book_id")),
-                    member_id: MemberId::from_uuid(row.get("member_id")),
-                    loaned_at: row.get("loaned_at"),
-                    due_date: row.get("due_date"),
-                    returned_at: row.get("returned_at"),
-                    extension_count: row.get::<i16, _>("extension_count") as u8,
-                    status: LoanStatus::from_str(row.get("status")).map_err(|e| {
-                        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-                            as Box<dyn std::error::Error + Send + Sync>
-                    })?,
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                })
-            })
-            .collect()
+        rows.iter().map(map_row_to_loan_view).collect()
     }
 
     /// IDで貸出を取得
@@ -193,24 +191,7 @@ impl LoanReadModelTrait for LoanReadModel {
         .fetch_optional(&self.pool)
         .await?;
 
-        match row {
-            Some(row) => Ok(Some(LoanView {
-                loan_id: LoanId::from_uuid(row.get("loan_id")),
-                book_id: BookId::from_uuid(row.get("book_id")),
-                member_id: MemberId::from_uuid(row.get("member_id")),
-                loaned_at: row.get("loaned_at"),
-                due_date: row.get("due_date"),
-                returned_at: row.get("returned_at"),
-                extension_count: row.get::<i16, _>("extension_count") as u8,
-                status: LoanStatus::from_str(row.get("status")).map_err(|e| {
-                    Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-                        as Box<dyn std::error::Error + Send + Sync>
-                })?,
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
-            })),
-            None => Ok(None),
-        }
+        row.as_ref().map(map_row_to_loan_view).transpose()
     }
 
     /// 会員の全貸出を検索（貸出履歴）
@@ -237,24 +218,6 @@ impl LoanReadModelTrait for LoanReadModel {
         .fetch_all(&self.pool)
         .await?;
 
-        rows.iter()
-            .map(|row| {
-                Ok(LoanView {
-                    loan_id: LoanId::from_uuid(row.get("loan_id")),
-                    book_id: BookId::from_uuid(row.get("book_id")),
-                    member_id: MemberId::from_uuid(row.get("member_id")),
-                    loaned_at: row.get("loaned_at"),
-                    due_date: row.get("due_date"),
-                    returned_at: row.get("returned_at"),
-                    extension_count: row.get::<i16, _>("extension_count") as u8,
-                    status: LoanStatus::from_str(row.get("status")).map_err(|e| {
-                        Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-                            as Box<dyn std::error::Error + Send + Sync>
-                    })?,
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                })
-            })
-            .collect()
+        rows.iter().map(map_row_to_loan_view).collect()
     }
 }
