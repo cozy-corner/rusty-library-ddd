@@ -1,6 +1,6 @@
 mod common;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rusty_library_ddd::adapters::postgres::{loan_read_model::LoanReadModel, projector};
 use rusty_library_ddd::domain::events::{
     BookLoaned, BookReturned, DomainEvent, LoanBecameOverdue, LoanExtended,
@@ -10,6 +10,16 @@ use rusty_library_ddd::ports::loan_read_model::{
     LoanReadModel as LoanReadModelTrait, LoanStatus, LoanView,
 };
 use sqlx::PgPool;
+
+/// PostgreSQLの時刻精度（マイクロ秒）に合わせて丸める
+///
+/// PostgreSQL TIMESTAMPTZはマイクロ秒精度（6桁）だが、
+/// RustのDateTime<Utc>はナノ秒精度（9桁）を持つ。
+/// DBへの保存・取得で精度が変わるため、テストでは比較前に統一する。
+fn truncate_to_micros(dt: DateTime<Utc>) -> DateTime<Utc> {
+    let micros = dt.timestamp_micros();
+    DateTime::from_timestamp_micros(micros).expect("Invalid timestamp")
+}
 
 /// テストデータをクリーンアップ
 async fn cleanup_loan(pool: &PgPool, loan_id: LoanId) {
@@ -117,7 +127,10 @@ async fn test_loan_read_model_upsert() {
         .unwrap();
 
     assert_eq!(retrieved.extension_count, 1);
-    assert_eq!(retrieved.due_date, now + chrono::Duration::days(28));
+    assert_eq!(
+        retrieved.due_date,
+        truncate_to_micros(now + chrono::Duration::days(28))
+    );
 
     // Cleanup
     cleanup_loan(&pool, loan_id).await;
@@ -412,7 +425,7 @@ async fn test_projector_loan_extended() {
 
     assert_eq!(loan_view.status, LoanStatus::Active);
     assert_eq!(loan_view.extension_count, 1);
-    assert_eq!(loan_view.due_date, new_due_date);
+    assert_eq!(loan_view.due_date, truncate_to_micros(new_due_date));
 
     // Cleanup
     cleanup_loan(&pool, loan_id).await;
@@ -461,7 +474,7 @@ async fn test_projector_book_returned() {
         .expect("Loan not found");
 
     assert_eq!(loan_view.status, LoanStatus::Returned);
-    assert_eq!(loan_view.returned_at, Some(returned_at));
+    assert_eq!(loan_view.returned_at, Some(truncate_to_micros(returned_at)));
 
     // Cleanup
     cleanup_loan(&pool, loan_id).await;
