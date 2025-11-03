@@ -1,0 +1,21 @@
+# Cocogitto Configuration
+# Conventional Commits tool for versioning and changelog generation
+# See: https://docs.cocogitto.io/
+
+[commit_types]
+feat = { changelog_title = "Features", omit_from_changelog = false }
+fix = { changelog_title = "Bug Fixes", omit_from_changelog = false }
+refactor = { changelog_title = "Refactoring", omit_from_changelog = false }
+test = { changelog_title = "Tests", omit_from_changelog = true }
+docs = { changelog_title = "Documentation", omit_from_changelog = false }
+ci = { changelog_title = "CI/CD", omit_from_changelog = false }
+chore = { changelog_title = "Chores", omit_from_changelog = true }
+
+[changelog]
+path = "CHANGELOG.md"
+template = "default"
+authors = []
+
+[bump_profiles.default]
+pre_bump_hooks = []
+post_bump_hooks = []
