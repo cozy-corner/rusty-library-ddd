@@ -337,6 +337,20 @@ async fn test_find_by_member_id() {
 }
 
 #[tokio::test]
+async fn test_get_by_id_returns_none_for_nonexistent() {
+    let pool = common::create_test_pool().await;
+    let read_model = LoanReadModel::new(pool.clone());
+
+    let non_existent_id = LoanId::new();
+    let result = read_model
+        .get_by_id(non_existent_id)
+        .await
+        .expect("Query should succeed");
+
+    assert!(result.is_none());
+}
+
+#[tokio::test]
 async fn test_projector_book_loaned() {
     let pool = common::create_test_pool().await;
     let read_model = LoanReadModel::new(pool.clone());
