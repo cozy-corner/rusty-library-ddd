@@ -204,6 +204,7 @@ Conventional Commitsに従います：
 - `refactor`: リファクタリング
 - `test`: テスト追加・修正
 - `docs`: ドキュメント
+- `ci`: CI/CD設定
 - `chore`: ビルド、ツール設定等
 
 **良いコミットメッセージの原則:**
@@ -255,9 +256,32 @@ LoanStatus enum を追加して...
 
 ### 開発ツール
 
-- **品質管理**: cargo-husky（pre-commit hook）
-  - Format check: `cargo fmt`
-  - Lint: `cargo clippy`
-  - Test: `cargo test`
+- **品質管理**: cargo-husky（Git hooks）
+  - **pre-commit hook**: Format check, Lint, Test
+    - `cargo fmt --all -- --check`
+    - `cargo clippy --all-targets --all-features -- -D warnings`
+    - `cargo test`
+  - **commit-msg hook**: コミットメッセージ検証
+    - Conventional Commits形式の検証
+    - 英語のみ（日本語禁止）
+    - 文字数制限（推奨: 50文字、最大: 72文字）
 
 詳細なバージョンは `Cargo.toml` を参照してください。
+
+#### Git Hooks のセットアップ
+
+初回セットアップ時に以下を実行してください：
+
+```bash
+# 1. cocogitto をインストール（必須）
+cargo install --locked cocogitto
+
+# 2. テストを実行してGit hooksをセットアップ
+cargo test
+```
+
+`cargo test`を実行すると、cargo-huskyが自動的に`.cargo-husky/hooks/`から`.git/hooks/`にhookファイルをコピーします。
+
+**重要**:
+- cocogittoは必須です。インストールされていないとコミットできません。
+- hookを更新した場合も`cargo test`を実行すれば自動的に反映されます。

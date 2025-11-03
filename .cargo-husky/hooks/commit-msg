@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# Exit on error
+set -e
+
+COMMIT_MSG_FILE=$1
+
+if [ -z "$COMMIT_MSG_FILE" ]; then
+    echo "Error: No commit message file provided"
+    exit 1
+fi
+
+commit_msg=$(cat "$COMMIT_MSG_FILE")
+header=$(echo "$commit_msg" | head -n1)
+
+echo "Validating commit message..."
+
+# 1. Validate Conventional Commits format with cocogitto
+if ! command -v cog &> /dev/null; then
+    echo ""
+    echo "❌ Error: cocogitto is not installed"
+    echo ""
+    echo "cocogitto is required for commit message validation."
+    echo ""
+    echo "Install with:"
+    echo "  cargo install --locked cocogitto"
+    echo ""
+    echo "See CLAUDE.md for setup instructions."
+    exit 1
+fi
+
+if ! cog verify --file "$COMMIT_MSG_FILE" 2>/dev/null; then
+    echo ""
+    echo "❌ Error: Invalid commit message format"
+    echo ""
+    echo "Required format: <type>: <description>"
+    echo ""
+    echo "Allowed types (see cog.toml):"
+    echo "  - feat:     New feature"
+    echo "  - fix:      Bug fix"
+    echo "  - refactor: Code refactoring"
+    echo "  - test:     Test addition or modification"
+    echo "  - docs:     Documentation"
+    echo "  - ci:       CI/CD configuration"
+    echo "  - chore:    Build, tools, configuration"
+    echo ""
+    echo "Example: feat: add user authentication"
+    echo ""
+    echo "See CLAUDE.md for detailed guidelines."
+    exit 1
+fi
+
+# 2. Check for Japanese and CJK characters
+# Using python for reliable Unicode detection
+if command -v python3 &> /dev/null; then
+    if python3 -c "
+import sys
+import re
+text = sys.stdin.read()
+# Japanese and CJK character ranges:
+# - Hiragana: U+3040-U+309F
+# - Katakana: U+30A0-U+30FF
+# - CJK Symbols: U+3000-U+303F (includes 。！etc)
+# - Kanji: U+4E00-U+9FFF
+# - Fullwidth forms: U+FF00-U+FFEF (includes ！etc)
+japanese_pattern = re.compile(r'[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uFF00-\uFFEF]')
+if japanese_pattern.search(text):
+    sys.exit(1)
+" <<< "$commit_msg"; then
+        :  # No Japanese/CJK characters found
+    else
+        echo ""
+        echo "❌ Error: Commit message must be in English only"
+        echo ""
+        echo "Japanese or CJK characters detected."
+        echo "Please write commit messages in English according to CLAUDE.md guidelines."
+        echo ""
+        echo "Bad example: 完璧です！修正が完了しました。"
+        echo "Good example: refactor: improve error handling"
+        exit 1
+    fi
+else
+    # Fallback: Use LC_ALL=C grep for non-ASCII detection
+    if echo "$commit_msg" | LC_ALL=C grep -q '[^ -~]'; then
+        echo ""
+        echo "❌ Error: Commit message must be in English only"
+        echo ""
+        echo "Non-ASCII characters detected."
+        echo "Please write commit messages in English according to CLAUDE.md guidelines."
+        echo ""
+        echo "Note: Install python3 for better Unicode detection."
+        exit 1
+    fi
+fi
+
+# 3. Check header length (warn if > 50, error if > 72)
+header_length=${#header}
+if [ $header_length -gt 72 ]; then
+    echo ""
+    echo "❌ Error: Commit header too long ($header_length characters)"
+    echo ""
+    echo "Maximum: 72 characters (recommended: 50 characters)"
+    echo "Current header: $header"
+    exit 1
+elif [ $header_length -gt 50 ]; then
+    echo ""
+    echo "⚠️  Warning: Commit header exceeds recommended length ($header_length > 50 characters)"
+    echo "   Consider making it more concise for better readability"
+    echo ""
+fi
+
+echo "✅ Commit message validation passed!"
