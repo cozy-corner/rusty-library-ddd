@@ -7,9 +7,9 @@ use axum::{
 
 use super::types::ErrorResponse;
 
-/// API layer error type
+/// API層のエラー型
 ///
-/// Wraps application layer errors and provides HTTP response mapping.
+/// アプリケーション層のエラーをラップし、HTTPレスポンスへのマッピングを提供する。
 #[derive(Debug)]
 pub struct ApiError(LoanApplicationError);
 
@@ -22,12 +22,12 @@ impl From<LoanApplicationError> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, error_type, message) = match self.0 {
-            // 404 Not Found - Requested resource does not exist
+            // 404 Not Found - リクエストされたリソースが存在しない
             LoanApplicationError::LoanNotFound => {
                 (StatusCode::NOT_FOUND, "LOAN_NOT_FOUND", "Loan not found")
             }
 
-            // 422 Unprocessable Entity - Business rule violations
+            // 422 Unprocessable Entity - ビジネスルール違反
             LoanApplicationError::MemberNotFound => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "MEMBER_NOT_FOUND",
@@ -59,7 +59,7 @@ impl IntoResponse for ApiError {
                 msg.as_str(),
             ),
 
-            // 500 Internal Server Error - System failures
+            // 500 Internal Server Error - システム障害
             LoanApplicationError::EventStoreError(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "EVENT_STORE_ERROR",

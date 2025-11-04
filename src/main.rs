@@ -15,7 +15,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() {
-    // Initialize tracing
+    // トレーシングの初期化
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -24,27 +24,27 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Database connection URL
-    // For now, using a placeholder - actual database connection will be in Task 7 (Integration)
+    // データベース接続URL
+    // 現時点ではプレースホルダー - 実際のDB接続はTask 7（統合）で実装
     let database_url =
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/library".into());
 
     tracing::info!("Connecting to database...");
 
-    // Initialize database connection pool
+    // データベース接続プールの初期化
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await
         .expect("Failed to connect to database");
 
-    // Initialize adapters
+    // アダプターの初期化
     let event_store = Arc::new(PostgresEventStore::new(pool.clone()));
     let loan_read_model = Arc::new(PostgresLoanReadModel::new(pool.clone()));
     let member_service = Arc::new(MockMemberService::new());
     let book_service = Arc::new(MockBookService::new());
 
-    // Create service dependencies
+    // サービス依存関係の作成
     let service_deps = ServiceDependencies {
         event_store,
         loan_read_model,
@@ -52,13 +52,13 @@ async fn main() {
         book_service,
     };
 
-    // Create application state
+    // アプリケーション状態の作成
     let app_state = Arc::new(AppState { service_deps });
 
-    // Create router
+    // ルーターの作成
     let app = create_router(app_state);
 
-    // Server configuration
+    // サーバー設定
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".into());
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -67,7 +67,7 @@ async fn main() {
 
     tracing::info!("Server listening on {}", addr);
 
-    // Start server
+    // サーバー起動
     axum::serve(listener, app)
         .await
         .expect("Failed to start server");

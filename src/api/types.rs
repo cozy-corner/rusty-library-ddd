@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Request to create a loan
+/// 貸出作成リクエスト
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LoanBookRequest {
     pub book_id: Uuid,
@@ -12,7 +12,7 @@ pub struct LoanBookRequest {
 }
 
 impl LoanBookRequest {
-    /// Convert to domain command
+    /// ドメインコマンドへ変換
     pub fn to_command(&self) -> crate::domain::commands::LoanBook {
         crate::domain::commands::LoanBook {
             book_id: BookId::from_uuid(self.book_id),
@@ -23,7 +23,7 @@ impl LoanBookRequest {
     }
 }
 
-/// Response for successful loan creation
+/// 貸出作成成功レスポンス
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoanCreatedResponse {
     pub loan_id: Uuid,
@@ -33,7 +33,7 @@ pub struct LoanCreatedResponse {
     pub due_date: DateTime<Utc>,
 }
 
-/// Response for successful loan extension
+/// 貸出延長成功レスポンス
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoanExtendedResponse {
     pub loan_id: Uuid,
@@ -41,14 +41,14 @@ pub struct LoanExtendedResponse {
     pub extension_count: u8,
 }
 
-/// Response for successful book return
+/// 返却成功レスポンス
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BookReturnedResponse {
     pub loan_id: Uuid,
     pub returned_at: DateTime<Utc>,
 }
 
-/// Error response
+/// エラーレスポンス
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub error: String,
