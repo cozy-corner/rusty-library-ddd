@@ -21,4 +21,3 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 cargo-husky = { version = "1", features = ["user-hooks"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

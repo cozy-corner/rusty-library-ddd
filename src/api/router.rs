@@ -5,7 +5,9 @@ use axum::{
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
-use super::handlers::{AppState, create_loan, extend_loan, return_book};
+use super::handlers::{
+    AppState, create_loan, extend_loan, get_loan_by_id, list_loans, return_book,
+};
 
 /// 貸出管理の全エンドポイントを持つAPIルーターを作成
 ///
@@ -14,7 +16,7 @@ use super::handlers::{AppState, create_loan, extend_loan, return_book};
 /// - POST /loans/:id/extend - 貸出を延長
 /// - POST /loans/:id/return - 書籍を返却
 ///
-/// 将来のクエリエンドポイント（Read操作 - Task 6.2）:
+/// クエリエンドポイント（Read操作）:
 /// - GET /loans - フィルタ付き貸出一覧
 /// - GET /loans/:id - 貸出詳細
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -22,9 +24,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // ヘルスチェックエンドポイント
         .route("/health", get(health_check))
         // コマンドエンドポイント（Write操作）
-        .route("/loans", post(create_loan))
+        .route("/loans", post(create_loan).get(list_loans))
         .route("/loans/:id/extend", post(extend_loan))
         .route("/loans/:id/return", post(return_book))
+        // クエリエンドポイント（Read操作）
+        .route("/loans/:id", get(get_loan_by_id))
         // トレーシングミドルウェアを追加
         .layer(TraceLayer::new_for_http())
         // アプリケーション状態を追加
