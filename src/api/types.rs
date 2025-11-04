@@ -23,18 +23,6 @@ impl LoanBookRequest {
     }
 }
 
-/// Request to extend a loan
-///
-/// No request body needed - the loan_id comes from the path parameter
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ExtendLoanRequest {}
-
-/// Request to return a book
-///
-/// No request body needed - the loan_id comes from the path parameter
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ReturnBookRequest {}
-
 /// Response for successful loan creation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoanCreatedResponse {
