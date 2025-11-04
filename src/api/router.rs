@@ -7,31 +7,31 @@ use tower_http::trace::TraceLayer;
 
 use super::handlers::{AppState, create_loan, extend_loan, return_book};
 
-/// Creates the API router with all loan management endpoints
+/// 貸出管理の全エンドポイントを持つAPIルーターを作成
 ///
-/// Command endpoints (Write operations):
-/// - POST /loans - Create a new loan
-/// - POST /loans/:id/extend - Extend a loan
-/// - POST /loans/:id/return - Return a book
+/// コマンドエンドポイント（Write操作）:
+/// - POST /loans - 新しい貸出を作成
+/// - POST /loans/:id/extend - 貸出を延長
+/// - POST /loans/:id/return - 書籍を返却
 ///
-/// Future query endpoints (Read operations - Task 6.2):
-/// - GET /loans - List loans with filters
-/// - GET /loans/:id - Get loan details
+/// 将来のクエリエンドポイント（Read操作 - Task 6.2）:
+/// - GET /loans - フィルタ付き貸出一覧
+/// - GET /loans/:id - 貸出詳細
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
-        // Health check endpoint
+        // ヘルスチェックエンドポイント
         .route("/health", get(health_check))
-        // Command endpoints (Write operations)
+        // コマンドエンドポイント（Write操作）
         .route("/loans", post(create_loan))
         .route("/loans/:id/extend", post(extend_loan))
         .route("/loans/:id/return", post(return_book))
-        // Add tracing middleware
+        // トレーシングミドルウェアを追加
         .layer(TraceLayer::new_for_http())
-        // Add application state
+        // アプリケーション状態を追加
         .with_state(state)
 }
 
-/// Health check endpoint
+/// ヘルスチェックエンドポイント
 async fn health_check() -> &'static str {
     "OK"
 }

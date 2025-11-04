@@ -16,21 +16,21 @@ use super::{
     types::{BookReturnedResponse, LoanBookRequest, LoanCreatedResponse, LoanExtendedResponse},
 };
 
-/// Application state shared across handlers
+/// ハンドラー間で共有されるアプリケーション状態
 #[derive(Clone)]
 pub struct AppState {
     pub service_deps: ServiceDependencies,
 }
 
-/// POST /loans - Create a new loan
+/// POST /loans - 新しい貸出を作成
 ///
-/// Creates a new book loan for a member.
+/// 会員への書籍の貸出を作成する。
 ///
-/// Business rules enforced:
-/// - Member must exist
-/// - Book must be available
-/// - Member must not have overdue loans
-/// - Member must not exceed loan limit (5 books)
+/// 強制されるビジネスルール:
+/// - 会員が存在すること
+/// - 書籍が貸出可能であること
+/// - 会員に延滞中の貸出がないこと
+/// - 会員の貸出数が上限（5冊）を超えないこと
 pub async fn create_loan(
     State(state): State<Arc<AppState>>,
     Json(req): Json<LoanBookRequest>,
@@ -39,7 +39,7 @@ pub async fn create_loan(
 
     let loan_id = execute_loan_book(&state.service_deps, cmd.clone()).await?;
 
-    // Fetch the created loan to return complete information
+    // 作成された貸出を取得して完全な情報を返す
     let loan_view = state
         .service_deps
         .loan_read_model
@@ -59,14 +59,14 @@ pub async fn create_loan(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-/// POST /loans/:id/extend - Extend a loan
+/// POST /loans/:id/extend - 貸出を延長
 ///
-/// Extends the loan period by 2 weeks.
+/// 貸出期間を2週間延長する。
 ///
-/// Business rules enforced:
-/// - Loan must exist
-/// - Loan must be in Active state (not Overdue or Returned)
-/// - Extension count must be less than 1 (max 1 extension allowed)
+/// 強制されるビジネスルール:
+/// - 貸出が存在すること
+/// - 貸出がActive状態であること（OverdueまたはReturnedでないこと）
+/// - 延長回数が1未満であること（最大1回まで延長可能）
 pub async fn extend_loan(
     State(state): State<Arc<AppState>>,
     Path(loan_id): Path<Uuid>,
@@ -80,7 +80,7 @@ pub async fn extend_loan(
 
     execute_extend_loan(&state.service_deps, cmd).await?;
 
-    // Fetch the updated loan to return new information
+    // 更新された貸出を取得して新しい情報を返す
     let loan_view = state
         .service_deps
         .loan_read_model
@@ -98,14 +98,14 @@ pub async fn extend_loan(
     Ok((StatusCode::OK, Json(response)))
 }
 
-/// POST /loans/:id/return - Return a book
+/// POST /loans/:id/return - 書籍を返却
 ///
-/// Processes the return of a loaned book.
+/// 貸出中の書籍の返却を処理する。
 ///
-/// Business rules enforced:
-/// - Loan must exist
-/// - Loan must not already be returned
-/// - Overdue loans can still be returned (no late fees for public libraries)
+/// 強制されるビジネスルール:
+/// - 貸出が存在すること
+/// - 既に返却済みでないこと
+/// - 延滞中の貸出も返却可能（公立図書館のため延滞料金なし）
 pub async fn return_book(
     State(state): State<Arc<AppState>>,
     Path(loan_id): Path<Uuid>,
@@ -119,7 +119,7 @@ pub async fn return_book(
 
     execute_return_book(&state.service_deps, cmd).await?;
 
-    // Fetch the updated loan to confirm return
+    // 更新された貸出を取得して返却を確認
     let loan_view = state
         .service_deps
         .loan_read_model
