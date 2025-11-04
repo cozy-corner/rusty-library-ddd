@@ -60,26 +60,39 @@ impl IntoResponse for ApiError {
             ),
 
             // 500 Internal Server Error - システム障害
-            LoanApplicationError::EventStoreError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "EVENT_STORE_ERROR",
-                "Failed to store event",
-            ),
-            LoanApplicationError::ReadModelError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "READ_MODEL_ERROR",
-                "Failed to update read model",
-            ),
-            LoanApplicationError::MemberServiceError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "MEMBER_SERVICE_ERROR",
-                "Member service error",
-            ),
-            LoanApplicationError::BookServiceError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "BOOK_SERVICE_ERROR",
-                "Book service error",
-            ),
+            // 内部エラーの詳細はログに記録し、クライアントには一般的なメッセージのみを返す
+            LoanApplicationError::EventStoreError(ref e) => {
+                tracing::error!("Event store error: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "EVENT_STORE_ERROR",
+                    "Failed to store event",
+                )
+            }
+            LoanApplicationError::ReadModelError(ref e) => {
+                tracing::error!("Read model error: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "READ_MODEL_ERROR",
+                    "Failed to update read model",
+                )
+            }
+            LoanApplicationError::MemberServiceError(ref e) => {
+                tracing::error!("Member service error: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "MEMBER_SERVICE_ERROR",
+                    "Member service error",
+                )
+            }
+            LoanApplicationError::BookServiceError(ref e) => {
+                tracing::error!("Book service error: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "BOOK_SERVICE_ERROR",
+                    "Book service error",
+                )
+            }
         };
 
         let body = Json(ErrorResponse::new(error_type, message));

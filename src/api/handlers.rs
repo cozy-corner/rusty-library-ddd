@@ -2,25 +2,37 @@ use crate::application::loan::{
     LoanApplicationError, ServiceDependencies, extend_loan as execute_extend_loan,
     loan_book as execute_loan_book, return_book as execute_return_book,
 };
-use crate::domain::value_objects::LoanId;
+use crate::domain::value_objects::{LoanId, MemberId};
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::{IntoResponse, Response},
 };
 use std::sync::Arc;
 use uuid::Uuid;
 
 use super::{
     error::ApiError,
-    types::{BookReturnedResponse, LoanBookRequest, LoanCreatedResponse, LoanExtendedResponse},
+    types::{
+        BookReturnedResponse, ListLoansQuery, LoanBookRequest, LoanCreatedResponse,
+        LoanExtendedResponse, LoanResponse,
+    },
 };
+
+// ============================================================================
+// State
+// ============================================================================
 
 /// ハンドラー間で共有されるアプリケーション状態
 #[derive(Clone)]
 pub struct AppState {
     pub service_deps: ServiceDependencies,
 }
+
+// ============================================================================
+// Command handlers (POST)
+// ============================================================================
 
 /// POST /loans - 新しい貸出を作成
 ///
@@ -134,4 +146,104 @@ pub async fn return_book(
     };
 
     Ok((StatusCode::OK, Json(response)))
+}
+
+// ============================================================================
+// Query handlers (GET)
+// ============================================================================
+
+/// GET /loans/:id - 貸出詳細をIDで取得
+///
+/// 見つかった場合は貸出情報を返し、見つからない場合は404を返す。
+pub async fn get_loan_by_id(
+    State(state): State<Arc<AppState>>,
+    Path(loan_id): Path<Uuid>,
+) -> Result<Json<LoanResponse>, QueryError> {
+    let loan_id = LoanId::from_uuid(loan_id);
+
+    match state.service_deps.loan_read_model.get_by_id(loan_id).await {
+        Ok(Some(loan_view)) => Ok(Json(LoanResponse::from(loan_view))),
+        Ok(None) => Err(QueryError::NotFound(format!(
+            "Loan {} not found",
+            loan_id.value()
+        ))),
+        Err(e) => Err(QueryError::InternalError(e.to_string())),
+    }
+}
+
+/// GET /loans - オプションフィルタ付き貸出一覧取得
+///
+/// クエリパラメータ:
+/// - member_id: 会員IDでフィルタリング（必須）
+/// - status: ステータスでフィルタリング（active, overdue, returned）（オプション）
+///
+/// フィルタが指定されない場合は、会員の全貸出を返す。
+/// 現在はmember_idパラメータが必須。
+pub async fn list_loans(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ListLoansQuery>,
+) -> Result<Json<Vec<LoanResponse>>, QueryError> {
+    // member_idを必須とする
+    let member_id = query.member_id.ok_or_else(|| {
+        QueryError::BadRequest("member_id query parameter is required".to_string())
+    })?;
+
+    let member_id = MemberId::from_uuid(member_id);
+
+    // 会員の貸出を取得
+    let loans = state
+        .service_deps
+        .loan_read_model
+        .find_by_member_id(member_id)
+        .await
+        .map_err(|e| QueryError::InternalError(e.to_string()))?;
+
+    // ステータスフィルタが指定されている場合は適用
+    let filtered_loans: Vec<LoanResponse> = if let Some(status_str) = &query.status {
+        let status =
+            super::types::parse_status_filter(status_str).map_err(QueryError::BadRequest)?;
+
+        loans
+            .into_iter()
+            .filter(|loan| loan.status == status)
+            .map(LoanResponse::from)
+            .collect()
+    } else {
+        loans.into_iter().map(LoanResponse::from).collect()
+    };
+
+    Ok(Json(filtered_loans))
+}
+
+// ============================================================================
+// Error types
+// ============================================================================
+
+/// クエリハンドラー用のエラー型
+#[derive(Debug)]
+pub enum QueryError {
+    NotFound(String),
+    BadRequest(String),
+    InternalError(String),
+}
+
+impl IntoResponse for QueryError {
+    fn into_response(self) -> Response {
+        let (status, error_type, message) = match self {
+            QueryError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg),
+            QueryError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad_request", msg),
+            QueryError::InternalError(msg) => {
+                // 内部エラーの詳細はログに記録し、クライアントには一般的なメッセージのみを返す
+                tracing::error!("Internal error in query handler: {}", msg);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "An unexpected error occurred".to_string(),
+                )
+            }
+        };
+
+        let body = Json(super::types::ErrorResponse::new(error_type, message));
+        (status, body).into_response()
+    }
 }
