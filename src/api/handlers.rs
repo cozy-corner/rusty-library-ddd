@@ -13,10 +13,7 @@ use uuid::Uuid;
 
 use super::{
     error::ApiError,
-    types::{
-        BookReturnedResponse, ExtendLoanRequest, LoanBookRequest, LoanCreatedResponse,
-        LoanExtendedResponse, ReturnBookRequest,
-    },
+    types::{BookReturnedResponse, LoanBookRequest, LoanCreatedResponse, LoanExtendedResponse},
 };
 
 /// Application state shared across handlers
@@ -73,7 +70,6 @@ pub async fn create_loan(
 pub async fn extend_loan(
     State(state): State<Arc<AppState>>,
     Path(loan_id): Path<Uuid>,
-    Json(_req): Json<ExtendLoanRequest>,
 ) -> Result<(StatusCode, Json<LoanExtendedResponse>), ApiError> {
     let loan_id = LoanId::from_uuid(loan_id);
 
@@ -113,7 +109,6 @@ pub async fn extend_loan(
 pub async fn return_book(
     State(state): State<Arc<AppState>>,
     Path(loan_id): Path<Uuid>,
-    Json(_req): Json<ReturnBookRequest>,
 ) -> Result<(StatusCode, Json<BookReturnedResponse>), ApiError> {
     let loan_id = LoanId::from_uuid(loan_id);
 
