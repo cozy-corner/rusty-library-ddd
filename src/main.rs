@@ -24,8 +24,8 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // データベース接続URL
-    // 現時点ではプレースホルダー - 実際のDB接続はTask 7（統合）で実装
+    // データベース接続URLを環境変数から取得
+    // 環境変数が未設定の場合はローカル開発用のデフォルト値を使用
     let database_url =
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/library".into());
 
