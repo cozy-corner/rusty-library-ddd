@@ -233,7 +233,13 @@ impl IntoResponse for QueryError {
             QueryError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg),
             QueryError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad_request", msg),
             QueryError::InternalError(msg) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", msg)
+                // 内部エラーの詳細はログに記録し、クライアントには一般的なメッセージのみを返す
+                tracing::error!("Internal error in query handler: {}", msg);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "An unexpected error occurred".to_string(),
+                )
             }
         };
 
