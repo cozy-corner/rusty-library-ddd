@@ -29,7 +29,7 @@ async fn main() {
     let database_url =
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/library".into());
 
-    tracing::info!("Database URL: {}", database_url);
+    tracing::info!("Connecting to database...");
 
     // Initialize database connection pool
     let pool = sqlx::postgres::PgPoolOptions::new()
