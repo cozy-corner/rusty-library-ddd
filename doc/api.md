@@ -71,9 +71,7 @@ Content-Type: application/json
 
 | ステータス | 説明 |
 |-----------|------|
-| 404 Not Found | 会員が見つからない |
-| 409 Conflict | 本が貸出不可、または会員が延滞中 |
-| 400 Bad Request | 貸出上限超過、または不正なリクエスト |
+| 422 Unprocessable Entity | 会員が見つからない、本が貸出不可、会員が延滞中、または貸出上限超過 |
 
 ### curlコマンド例
 
@@ -127,8 +125,7 @@ Content-Type: application/json
 
 | ステータス | 説明 |
 |-----------|------|
-| 404 Not Found | 貸出が見つからない |
-| 400 Bad Request | 既に延長済み、または延長不可能な状態 |
+| 422 Unprocessable Entity | 貸出が見つからない、既に延長済み、または延長不可能な状態 |
 
 ### curlコマンド例
 
@@ -175,8 +172,7 @@ Content-Type: application/json
 
 | ステータス | 説明 |
 |-----------|------|
-| 404 Not Found | 貸出が見つからない |
-| 400 Bad Request | 既に返却済み |
+| 422 Unprocessable Entity | 貸出が見つからない、または既に返却済み |
 
 ### curlコマンド例
 
@@ -241,7 +237,7 @@ GET /loans/:id
 
 | ステータス | 説明 |
 |-----------|------|
-| 404 Not Found | 貸出が見つからない |
+| 422 Unprocessable Entity | 貸出が見つからない |
 
 ### curlコマンド例
 
@@ -350,9 +346,7 @@ curl "http://localhost:3000/loans?member_id=650e8400-e29b-41d4-a716-446655440000
 |----------------|------|
 | 200 OK | リクエストが成功 |
 | 201 Created | リソースの作成に成功 |
-| 400 Bad Request | リクエストが不正（バリデーションエラー、ビジネスルール違反など） |
-| 404 Not Found | リソースが見つからない |
-| 409 Conflict | リソースの状態が競合（本が貸出不可、会員が延滞中など） |
+| 422 Unprocessable Entity | ビジネスルール違反（リソースが見つからない、状態が不正など） |
 | 500 Internal Server Error | サーバー内部エラー |
 
 ---
