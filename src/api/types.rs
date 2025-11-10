@@ -67,7 +67,7 @@ pub struct ListLoansQuery {
 }
 
 /// 貸出レスポンス（GET /loans/:id と GET /loans）
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LoanResponse {
     pub loan_id: Uuid,
     pub book_id: Uuid,
