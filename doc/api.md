@@ -34,7 +34,8 @@ Content-Type: application/json
 
 {
   "book_id": "550e8400-e29b-41d4-a716-446655440000",
-  "member_id": "650e8400-e29b-41d4-a716-446655440000"
+  "member_id": "650e8400-e29b-41d4-a716-446655440000",
+  "staff_id": "750e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -44,6 +45,7 @@ Content-Type: application/json
 |-----------|-----|------|------|
 | book_id | UUID | ✓ | 貸し出す本のID |
 | member_id | UUID | ✓ | 借りる会員のID |
+| staff_id | UUID | ✓ | 貸出処理を行う職員のID |
 
 **ビジネスルール:**
 - 会員が存在すること
@@ -80,7 +82,8 @@ curl -X POST http://localhost:3000/loans \
   -H "Content-Type: application/json" \
   -d '{
     "book_id": "550e8400-e29b-41d4-a716-446655440000",
-    "member_id": "650e8400-e29b-41d4-a716-446655440000"
+    "member_id": "650e8400-e29b-41d4-a716-446655440000",
+    "staff_id": "750e8400-e29b-41d4-a716-446655440000"
   }'
 ```
 
