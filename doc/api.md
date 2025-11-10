@@ -370,7 +370,8 @@ LOAN_RESPONSE=$(curl -s -X POST http://localhost:3000/loans \
   -H "Content-Type: application/json" \
   -d '{
     "book_id": "550e8400-e29b-41d4-a716-446655440000",
-    "member_id": "650e8400-e29b-41d4-a716-446655440000"
+    "member_id": "650e8400-e29b-41d4-a716-446655440000",
+    "staff_id": "750e8400-e29b-41d4-a716-446655440000"
   }')
 
 LOAN_ID=$(echo $LOAN_RESPONSE | jq -r '.loan_id')
