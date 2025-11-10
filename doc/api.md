@@ -117,9 +117,17 @@ Content-Type: application/json
 {
   "loan_id": "750e8400-e29b-41d4-a716-446655440000",
   "new_due_date": "2025-02-12T10:30:00Z",
-  "extended_at": "2025-01-25T14:20:00Z"
+  "extension_count": 1
 }
 ```
+
+**フィールド説明:**
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| loan_id | UUID | 貸出ID |
+| new_due_date | DateTime | 延長後の新しい返却期限 |
+| extension_count | integer | 延長後の延長回数（常に1） |
 
 **エラーレスポンス:**
 
