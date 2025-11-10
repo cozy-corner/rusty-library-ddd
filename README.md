@@ -79,12 +79,49 @@ just db-status
 just clean
 ```
 
+## API使用例
+
+アプリケーションを起動すると、REST APIが利用可能になります。
+
+### クイックスタート
+
+```bash
+# 1. データベース起動
+just db-up
+
+# 2. アプリケーション起動（別ターミナル）
+just run
+
+# 3. APIにアクセス（別ターミナル）
+# 貸出を作成
+curl -X POST http://localhost:3000/loans \
+  -H "Content-Type: application/json" \
+  -d '{
+    "book_id": "550e8400-e29b-41d4-a716-446655440000",
+    "member_id": "650e8400-e29b-41d4-a716-446655440000"
+  }'
+
+# 貸出一覧を取得
+curl http://localhost:3000/loans
+```
+
+### 利用可能なエンドポイント
+
+- `POST /loans` - 貸出を作成
+- `POST /loans/:id/extend` - 貸出を延長
+- `POST /loans/:id/return` - 本を返却
+- `GET /loans/:id` - 貸出の詳細を取得
+- `GET /loans` - 貸出の一覧を取得（フィルタリング可能）
+
+詳細は [APIドキュメント](doc/api.md) を参照してください。
+
 ## プロジェクト構成
 
 詳細は `doc/` ディレクトリのドキュメントを参照してください。
 
 - [プロジェクト概要](doc/01_overview.md)
 - [Phase 1: 貸出管理](doc/phase/01_loan.md)
+- [APIドキュメント](doc/api.md)
 - [開発ガイド](claude.md)
 
 ## 品質管理
